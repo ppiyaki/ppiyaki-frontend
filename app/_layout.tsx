@@ -1,3 +1,4 @@
+import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useState } from "react";
@@ -11,11 +12,22 @@ void SplashScreen.preventAutoHideAsync().catch(() => {
 const CUSTOM_SPLASH_DURATION_MS = 2000;
 
 export default function RootLayout() {
-  const [showCustomSplash, setShowCustomSplash] = useState(true);
+  const [splashElapsed, setSplashElapsed] = useState(false);
+  const [fontsLoaded] = useFonts({
+    "Pretendard-Black": require("../assets/fonts/Pretendard-Black.ttf"),
+    "Pretendard-Bold": require("../assets/fonts/Pretendard-Bold.ttf"),
+    "Pretendard-ExtraBold": require("../assets/fonts/Pretendard-ExtraBold.ttf"),
+    "Pretendard-ExtraLight": require("../assets/fonts/Pretendard-ExtraLight.ttf"),
+    "Pretendard-Light": require("../assets/fonts/Pretendard-Light.ttf"),
+    "Pretendard-Medium": require("../assets/fonts/Pretendard-Medium.ttf"),
+    "Pretendard-Regular": require("../assets/fonts/Pretendard-Regular.ttf"),
+    "Pretendard-SemiBold": require("../assets/fonts/Pretendard-SemiBold.ttf"),
+    "Pretendard-Thin": require("../assets/fonts/Pretendard-Thin.ttf"),
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setShowCustomSplash(false);
+      setSplashElapsed(true);
     }, CUSTOM_SPLASH_DURATION_MS);
 
     return () => clearTimeout(timer);
@@ -27,7 +39,7 @@ export default function RootLayout() {
     });
   }, []);
 
-  if (showCustomSplash) {
+  if (!splashElapsed || !fontsLoaded) {
     return (
       <View style={styles.splashContainer} onLayout={handleSplashLayout}>
         <Image
@@ -41,7 +53,11 @@ export default function RootLayout() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="onboarding" />
+      <Stack.Screen name="select-role" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="modal" options={{ presentation: "modal" }} />
     </Stack>
   );
 }
