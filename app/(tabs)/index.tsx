@@ -12,7 +12,7 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       {/* 메인 화면 */}
       <View style={styles.header}>
-        <Text style={styles.greeting}>안녕하세요, 어르신! 🐥</Text>
+        <Text style={styles.greeting}>안녕하세요, 김복순님! 🐥</Text>
       </View>
       <View style={styles.content}>
         <Text style={{ fontSize: 80 }}>🐥</Text>

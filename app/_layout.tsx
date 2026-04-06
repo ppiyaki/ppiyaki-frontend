@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import "react-native-reanimated";
 
-void SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  // Ignore splash state races during fast refresh.
+});
 
 const CUSTOM_SPLASH_DURATION_MS = 2000;
 
@@ -20,7 +22,9 @@ export default function RootLayout() {
   }, []);
 
   const handleSplashLayout = useCallback(() => {
-    void SplashScreen.hideAsync();
+    void SplashScreen.hideAsync().catch(() => {
+      // Ignore duplicate hide calls during fast refresh.
+    });
   }, []);
 
   if (showCustomSplash) {
