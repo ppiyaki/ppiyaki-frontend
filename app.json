@@ -45,7 +45,7 @@
         "@react-native-seoul/kakao-login",
         {
           "kakaoAppKey": "08003eefd67c25489b651fb5927c04ca",
-          "kotlinVersion": "1.9.24"
+          "kotlinVersion": "2.0.21"
         }
       ],
       "expo-secure-store"
