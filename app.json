@@ -4,14 +4,16 @@
     "slug": "Ppiyaki",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon.jpg",
     "scheme": "ppiyaki",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ppiyaki.app"
     },
     "android": {
+      "package": "com.ppiyaki.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -38,11 +40,25 @@
             "backgroundColor": "#FFD24D"
           }
         }
-      ]
+      ],
+      [
+        "@react-native-seoul/kakao-login",
+        {
+          "kakaoAppKey": "08003eefd67c25489b651fb5927c04ca",
+          "kotlinVersion": "1.9.24"
+        }
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "66033cb8-6ef8-4e00-b0f9-59aef3e51067"
+      }
     }
   }
 }

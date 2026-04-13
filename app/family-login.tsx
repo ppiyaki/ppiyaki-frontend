@@ -1,6 +1,10 @@
 import AppText from "@/components/app-text";
+import KakaoLoginButton from "@/components/kakao-login-button";
+import { loginWithKakao } from "@/services/auth";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
+  Alert,
   Image,
   Pressable,
   StyleSheet,
@@ -10,6 +14,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function FamilyLoginScreen() {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  const handleKakaoLogin = async () => {
+    setLoading(true);
+    try {
+      const { isOnboarded } = await loginWithKakao();
+      if (isOnboarded) {
+        router.replace("/(tabs)");
+      } else {
+        router.replace("/signup/nickname" as any);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "로그인에 실패했습니다.";
+      Alert.alert("로그인 실패", msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
@@ -24,19 +46,7 @@ export default function FamilyLoginScreen() {
 
         <View style={styles.spacer} />
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.kakaoBtn,
-            pressed && styles.kakaoBtnPressed,
-          ]}
-          onPress={() => router.replace("/(tabs)")}
-        >
-          <Image
-            source={require("../assets/images/KakaoLogin.png")}
-            style={styles.kakaoImg}
-            resizeMode="contain"
-          />
-        </Pressable>
+        <KakaoLoginButton onPress={handleKakaoLogin} loading={loading} />
 
         <View style={styles.signupRow}>
           <AppText type="pretendard-r" style={styles.signupText}>
@@ -82,20 +92,10 @@ const styles = StyleSheet.create({
   spacer: {
     flex: 1,
   },
-  kakaoBtn: {
-    width: "100%",
-    marginBottom: 18,
-  },
-  kakaoBtnPressed: {
-    opacity: 0.88,
-  },
-  kakaoImg: {
-    width: "100%",
-    height: 54,
-  },
   signupRow: {
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 18,
   },
   signupText: {
     fontSize: 14,
