@@ -2,7 +2,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
 import "react-native-reanimated";
 
 void SplashScreen.preventAutoHideAsync().catch(() => {
@@ -47,6 +47,11 @@ export default function RootLayout() {
           style={styles.splashImage}
           resizeMode="cover"
         />
+        <ActivityIndicator
+          size="large"
+          color="#FFFFFF"
+          style={styles.spinner}
+        />
       </View>
     );
   }
@@ -56,6 +61,9 @@ export default function RootLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="select-role" />
+      <Stack.Screen name="senior-connect" />
+      <Stack.Screen name="family-login" />
+      <Stack.Screen name="signup" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
     </Stack>
@@ -70,5 +78,10 @@ const styles = StyleSheet.create({
   splashImage: {
     width: "100%",
     height: "100%",
+  },
+  spinner: {
+    position: "absolute",
+    bottom: 64,
+    alignSelf: "center",
   },
 });

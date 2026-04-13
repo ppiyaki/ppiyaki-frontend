@@ -16,8 +16,14 @@ export default function SelectRoleScreen() {
   const { width, height } = useWindowDimensions();
   const compact = width < 360 || height < 760;
 
-  const handlePickRole = (_role: Role) => {
-    router.replace("/(tabs)");
+  const handlePickRole = (role: Role) => {
+    if (role === "senior") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      router.replace("/senior-connect" as any);
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      router.replace("/family-login" as any);
+    }
   };
 
   return (
