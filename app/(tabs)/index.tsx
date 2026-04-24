@@ -1,31 +1,35 @@
 import AppText from "@/components/app-text";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  Image,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+const MENU_ITEMS = [
+  { label: "처방전 등록", emoji: "📋" },
+  { label: "내 약", emoji: "💊" },
+  { label: "삐약이 상점", emoji: "🛍️" },
+  { label: "내 정보", emoji: "👤" },
+];
 
 export default function HomeScreen() {
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={["top", "left", "right", "bottom"]}
+    >
       {/* 상단 헤더 */}
       <View style={styles.header}>
-        <Pressable style={styles.logBtn}>
-          <AppText type="pretendard-m" style={styles.logText}>
-            로그
+        <Image
+          source={require("../../assets/images/logo.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <View style={styles.pointsBadge}>
+          <AppText type="pretendard-b" style={styles.pointsText}>
+            900🥚
           </AppText>
-        </Pressable>
-        <AppText type="pretendard-b" style={styles.points}>
-          900알
-        </AppText>
+        </View>
         <Pressable style={styles.notifBtn}>
-          <AppText type="pretendard-r" style={styles.notifText}>
-            알림
-          </AppText>
-          <Ionicons name="notifications-outline" size={20} color="#444444" />
+          <Ionicons name="notifications-outline" size={32} color="#555" />
         </Pressable>
       </View>
 
@@ -37,11 +41,17 @@ export default function HomeScreen() {
             style={styles.characterImg}
             resizeMode="contain"
           />
-          <View style={styles.bubble}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.bubble,
+              pressed && { transform: [{ scale: 0.95 }] },
+            ]}
+          >
             <AppText type="pretendard-m" style={styles.bubbleText}>
               대화하기
             </AppText>
-          </View>
+            <View style={styles.bubbleTail} />
+          </Pressable>
         </View>
       </View>
 
@@ -55,32 +65,38 @@ export default function HomeScreen() {
             복약 연속{" "}
           </AppText>
           <AppText type="extrabold" style={styles.streakNum}>
-            90일
+            90
+          </AppText>
+          <AppText type="pretendard-r" style={styles.streakUnit}>
+            일
           </AppText>
         </View>
       </View>
 
       {/* 메뉴 그리드 */}
       <View style={styles.grid}>
-        <View style={styles.gridRow}>
-          <MenuBtn label="처방전 등록" />
-          <MenuBtn label="내 약" />
-        </View>
-        <View style={styles.gridRow}>
-          <MenuBtn label="삐악이 상점" />
-          <MenuBtn label="내 정보" />
-        </View>
+        {[0, 1].map((row) => (
+          <View key={row} style={styles.gridRow}>
+            {MENU_ITEMS.slice(row * 2, row * 2 + 2).map((item) => (
+              <MenuBtn key={item.label} label={item.label} emoji={item.emoji} />
+            ))}
+          </View>
+        ))}
       </View>
     </SafeAreaView>
   );
 }
 
-function MenuBtn({ label }: { label: string }) {
+function MenuBtn({ label, emoji }: { label: string; emoji: string }) {
   return (
     <Pressable
-      style={({ pressed }) => [styles.menuBtn, pressed && styles.menuBtnPressed]}
+      style={({ pressed }) => [
+        styles.menuBtn,
+        pressed && styles.menuBtnPressed,
+      ]}
     >
-      <AppText type="pretendard-m" style={styles.menuLabel}>
+      <AppText style={styles.menuEmoji}>{emoji}</AppText>
+      <AppText type="pretendard-s" style={styles.menuLabel}>
         {label}
       </AppText>
     </Pressable>
@@ -90,85 +106,93 @@ function MenuBtn({ label }: { label: string }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#FFFDF7",
   },
+
+  /* ── 헤더 ── */
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
-  logBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#C8B860",
-    backgroundColor: "#FFFDF7",
+  logo: {
+    width: 80,
+    height: 32,
   },
-  logText: {
-    fontSize: 14,
-    color: "#555555",
-  },
-  points: {
+  pointsBadge: {
     flex: 1,
-    textAlign: "center",
-    fontSize: 18,
-    color: "#171717",
+    alignItems: "center",
+  },
+  pointsText: {
+    fontSize: 16,
+    color: "#333",
   },
   notifBtn: {
-    flexDirection: "row",
+    width: 36,
+    height: 36,
+    justifyContent: "center",
     alignItems: "center",
-    gap: 4,
   },
-  notifText: {
-    fontSize: 14,
-    color: "#444444",
-  },
+
+  /* ── 캐릭터 ── */
   characterSection: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   characterWrap: {
-    position: "relative",
-    width: 200,
-    height: 200,
+    alignItems: "center",
   },
   characterImg: {
-    width: 200,
-    height: 200,
+    width: 238,
+    height: 244,
   },
   bubble: {
     position: "absolute",
-    top: 12,
-    right: -22,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E0D480",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    top: 8,
+    right: -30,
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: "#E8D88C",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     shadowColor: "#000",
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
+    shadowRadius: 6,
     elevation: 3,
   },
-  bubbleText: {
-    fontSize: 13,
-    color: "#333333",
+  bubbleTail: {
+    position: "absolute",
+    bottom: -8,
+    left: 20,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#E8D88C",
   },
+  bubbleText: {
+    fontSize: 14,
+    color: "#333",
+  },
+
+  /* ── 사용자 정보 ── */
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 24,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   userName: {
-    fontSize: 16,
-    color: "#555555",
+    fontSize: 17,
+    color: "#444",
   },
   streakRow: {
     flexDirection: "row",
@@ -176,36 +200,54 @@ const styles = StyleSheet.create({
   },
   streakLabel: {
     fontSize: 14,
-    color: "#555555",
+    color: "#777",
   },
   streakNum: {
-    fontSize: 30,
-    color: "#171717",
-    lineHeight: 34,
+    fontSize: 32,
+    color: "#F88835",
+    lineHeight: 36,
   },
+  streakUnit: {
+    fontSize: 14,
+    color: "#777",
+    marginLeft: 2,
+  },
+
+  /* ── 메뉴 그리드 ── */
   grid: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    gap: 10,
+    paddingBottom: 20,
+    gap: 12,
   },
   gridRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
   },
   menuBtn: {
     flex: 1,
-    aspectRatio: 1.15,
-    backgroundColor: "#EDE8D6",
-    borderRadius: 16,
-    justifyContent: "flex-end",
-    paddingBottom: 16,
-    paddingLeft: 14,
+    aspectRatio: 1.3,
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#EDE8D6",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    elevation: 2,
   },
   menuBtnPressed: {
-    opacity: 0.82,
+    backgroundColor: "#FBF7EC",
+    transform: [{ scale: 0.97 }],
+  },
+  menuEmoji: {
+    fontSize: 32,
   },
   menuLabel: {
-    fontSize: 16,
-    color: "#333333",
+    fontSize: 15,
+    color: "#333",
   },
 });

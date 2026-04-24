@@ -23,18 +23,22 @@ export async function loginWithKakao(): Promise<AuthResponse> {
     );
   }
 
+  console.log("=== 카카오 idToken ===", idToken);
+
   const res = await fetch(`${API_BASE}/api/v1/auth/kakao`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ idToken }),
   });
 
+  const body = await res.json().catch(() => ({}));
+  console.log("=== 백엔드 응답 ===", res.status, JSON.stringify(body));
+
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
     throw new Error(body.message ?? `로그인 실패 (${res.status})`);
   }
 
-  const data: AuthResponse = await res.json();
+  const data = body as AuthResponse;
 
   await saveTokens(data.accessToken, data.refreshToken);
   return data;
