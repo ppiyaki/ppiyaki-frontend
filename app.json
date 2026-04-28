@@ -48,7 +48,13 @@
           "kotlinVersion": "2.0.21"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "처방전을 촬영하기 위해 카메라 권한이 필요합니다."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

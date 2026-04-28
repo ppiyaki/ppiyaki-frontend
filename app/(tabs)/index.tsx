@@ -1,16 +1,25 @@
 import AppText from "@/components/app-text";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const MENU_ITEMS = [
-  { label: "처방전 등록", emoji: "📋" },
-  { label: "내 약", emoji: "💊" },
-  { label: "삐약이 상점", emoji: "🛍️" },
-  { label: "내 정보", emoji: "👤" },
+type MenuItem = {
+  label: string;
+  emoji: string;
+  href?: string;
+};
+
+const MENU_ITEMS: MenuItem[] = [
+  { label: "처방전 등록", emoji: "📋", href: "/prescription/intro" },
+  { label: "내 약", emoji: "💊", href: "/medications" },
+  { label: "삐악이 상점", emoji: "🛍️" },
+  { label: "내 정보", emoji: "👤", href: "/profile" },
 ];
 
 export default function HomeScreen() {
+  const router = useRouter();
+
   return (
     <SafeAreaView
       style={styles.safe}
@@ -28,7 +37,10 @@ export default function HomeScreen() {
             900🥚
           </AppText>
         </View>
-        <Pressable style={styles.notifBtn}>
+        <Pressable
+          onPress={() => router.push("/notifications" as any)}
+          style={styles.notifBtn}
+        >
           <Ionicons name="notifications-outline" size={32} color="#555" />
         </Pressable>
       </View>
@@ -78,7 +90,14 @@ export default function HomeScreen() {
         {[0, 1].map((row) => (
           <View key={row} style={styles.gridRow}>
             {MENU_ITEMS.slice(row * 2, row * 2 + 2).map((item) => (
-              <MenuBtn key={item.label} label={item.label} emoji={item.emoji} />
+              <MenuBtn
+                key={item.label}
+                label={item.label}
+                emoji={item.emoji}
+                onPress={
+                  item.href ? () => router.push(item.href as any) : undefined
+                }
+              />
             ))}
           </View>
         ))}
@@ -87,9 +106,18 @@ export default function HomeScreen() {
   );
 }
 
-function MenuBtn({ label, emoji }: { label: string; emoji: string }) {
+function MenuBtn({
+  label,
+  emoji,
+  onPress,
+}: {
+  label: string;
+  emoji: string;
+  onPress?: () => void;
+}) {
   return (
     <Pressable
+      onPress={onPress}
       style={({ pressed }) => [
         styles.menuBtn,
         pressed && styles.menuBtnPressed,
