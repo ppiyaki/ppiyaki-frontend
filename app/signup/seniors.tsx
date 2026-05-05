@@ -1,5 +1,6 @@
 import AppText from "@/components/app-text";
 import SignupProgress from "@/components/signup-progress";
+import { Gender, Senior, useSignup } from "@/contexts/signup-context";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -12,21 +13,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type Gender = "남" | "여" | "비공개" | null;
-
-interface Senior {
-  id: string;
-  name: string;
-  gender: Gender;
-}
-
 const GENDERS: Gender[] = ["남", "여", "비공개"];
 
 export default function SeniorsScreen() {
   const router = useRouter();
-  const [seniors, setSeniors] = useState<Senior[]>([
-    { id: "1", name: "", gender: null },
-  ]);
+  const { seniors: ctxSeniors, setSeniors: setCtxSeniors } = useSignup();
+  const [seniors, setSeniors] = useState<Senior[]>(
+    ctxSeniors.length > 0 ? ctxSeniors : [{ id: "1", name: "", gender: null }],
+  );
 
   const addSenior = () => {
     if (seniors.length >= 3) return;
@@ -104,7 +98,10 @@ export default function SeniorsScreen() {
       <View style={styles.footer}>
         <Pressable
           style={styles.btn}
-          onPress={() => router.push("/signup/notifications" as any)}
+          onPress={() => {
+            setCtxSeniors(seniors);
+            router.push("/signup/notifications" as any);
+          }}
         >
           <AppText type="pretendard-b" style={styles.btnText}>
             다음

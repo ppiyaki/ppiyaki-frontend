@@ -3,13 +3,7 @@ import KakaoLoginButton from "@/components/kakao-login-button";
 import { loginWithKakao } from "@/services/auth";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  Alert,
-  Image,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Alert, Image, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function FamilyLoginScreen() {
@@ -34,7 +28,10 @@ export default function FamilyLoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={["top", "left", "right", "bottom"]}
+    >
       <View style={styles.container}>
         <View style={styles.logoBox}>
           <Image
@@ -83,7 +80,7 @@ const styles = StyleSheet.create({
     borderColor: "#D8C88A",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FFFDF7",
+    backgroundColor: "#FEFDFB",
   },
   logoImg: {
     width: 156,

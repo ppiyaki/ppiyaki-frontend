@@ -1,11 +1,11 @@
 import AppText from "@/components/app-text";
 import { useRouter } from "expo-router";
 import {
-  Image,
-  Pressable,
-  StyleSheet,
-  useWindowDimensions,
-  View,
+    Image,
+    Pressable,
+    StyleSheet,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -88,7 +88,7 @@ function RoleImageButton({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#FFFDF7",
+    backgroundColor: "#FEFDFB",
   },
   container: {
     flex: 1,

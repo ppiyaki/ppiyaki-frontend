@@ -17,7 +17,10 @@ export default function PrescriptionResultScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={["top", "left", "right", "bottom"]}
+    >
       <PageHeader title="처방전 등록" />
 
       <View style={styles.content}>
@@ -76,7 +79,7 @@ export default function PrescriptionResultScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#FFFDF7",
+    backgroundColor: "#FEFDFB",
   },
   content: {
     flex: 1,

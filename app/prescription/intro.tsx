@@ -50,7 +50,7 @@ export default function PrescriptionIntroScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#FFFDF7",
+    backgroundColor: "#FEFDFB",
   },
   content: {
     flex: 1,

@@ -86,6 +86,7 @@ export default function HomeScreen() {
             resizeMode="contain"
           />
           <Pressable
+            onPress={() => router.push("/chat" as any)}
             style={({ pressed }) => [
               styles.bubble,
               pressed && { transform: [{ scale: 0.95 }] },
@@ -143,13 +144,7 @@ export default function HomeScreen() {
   );
 }
 
-function MenuBtn({
-  item,
-  onPress,
-}: {
-  item: MenuItem;
-  onPress?: () => void;
-}) {
+function MenuBtn({ item, onPress }: { item: MenuItem; onPress?: () => void }) {
   return (
     <Pressable
       onPress={onPress}
@@ -179,7 +174,7 @@ function MenuBtn({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#FFFDF7",
+    backgroundColor: "#FEFDFB",
   },
 
   /* ── 헤더 ── */

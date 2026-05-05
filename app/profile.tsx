@@ -120,7 +120,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#FFFDF7" },
+  safe: { flex: 1, backgroundColor: "#FEFDFB" },
   content: { flex: 1, padding: 16 },
 
   card: {

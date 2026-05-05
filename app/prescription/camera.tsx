@@ -37,7 +37,10 @@ export default function PrescriptionCameraScreen() {
 
   if (!permission.granted) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+      <SafeAreaView
+        style={styles.safe}
+        edges={["top", "left", "right", "bottom"]}
+      >
         <PageHeader title="처방전 등록" />
         <View style={styles.permissionBox}>
           <AppText type="pretendard-m" style={styles.permissionText}>
@@ -54,7 +57,10 @@ export default function PrescriptionCameraScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={["top", "left", "right", "bottom"]}
+    >
       <PageHeader title="처방전 등록" />
 
       <View style={styles.cameraWrap}>
@@ -87,7 +93,7 @@ export default function PrescriptionCameraScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#FFFDF7",
+    backgroundColor: "#FEFDFB",
   },
   cameraWrap: {
     flex: 1,

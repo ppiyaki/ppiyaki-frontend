@@ -69,7 +69,10 @@ const TIME_META: Record<TimeOfDay, { icon: string; bg: string }> = {
 
 export default function NotificationsScreen() {
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={["top", "left", "right", "bottom"]}
+    >
       <PageHeader title="알림" />
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -109,7 +112,9 @@ function NotifCard({ item }: { item: NotifItem }) {
             { backgroundColor: TIME_META[item.time].bg },
           ]}
         >
-          <AppText style={{ fontSize: 13 }}>{TIME_META[item.time].icon}</AppText>
+          <AppText style={{ fontSize: 13 }}>
+            {TIME_META[item.time].icon}
+          </AppText>
         </View>
       </View>
       {item.status === "pending" ? (
@@ -128,7 +133,7 @@ function NotifCard({ item }: { item: NotifItem }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#FFFDF7" },
+  safe: { flex: 1, backgroundColor: "#FEFDFB" },
   scroll: { padding: 16, paddingBottom: 24 },
 
   group: { marginBottom: 16 },
