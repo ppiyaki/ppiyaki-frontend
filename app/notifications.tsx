@@ -133,7 +133,7 @@ function NotifCard({ item }: { item: NotifItem }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#FEFDFB" },
+  safe: { flex: 1, backgroundColor: "#FDFCF3" },
   scroll: { padding: 16, paddingBottom: 24 },
 
   group: { marginBottom: 16 },

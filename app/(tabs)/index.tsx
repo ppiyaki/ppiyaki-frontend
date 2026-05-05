@@ -17,7 +17,7 @@ const MENU_ITEMS: MenuItem[] = [
   {
     label: "처방전 등록",
     emoji: "📋",
-    description: "처방전을 등록해요",
+    description: " ",
     iconBg: "#FFF1C8",
     arrowColor: "#F8B835",
     href: "/prescription/intro",
@@ -25,7 +25,7 @@ const MENU_ITEMS: MenuItem[] = [
   {
     label: "내 약",
     emoji: "💊",
-    description: "복용 중인 약을 확인해요",
+    description: " ",
     iconBg: "#D6F1EA",
     arrowColor: "#5BC4AE",
     href: "/medications",
@@ -33,14 +33,14 @@ const MENU_ITEMS: MenuItem[] = [
   {
     label: "삐약이 상점",
     emoji: "🛍️",
-    description: "건강한 생활을 도와드려요",
+    description: " ",
     iconBg: "#FFF1C8",
     arrowColor: "#F8B835",
   },
   {
     label: "내 정보",
     emoji: "👤",
-    description: "내 정보를 확인해요",
+    description: " ",
     iconBg: "#D6F1EA",
     arrowColor: "#5BC4AE",
     href: "/profile",
@@ -174,7 +174,7 @@ function MenuBtn({ item, onPress }: { item: MenuItem; onPress?: () => void }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#FEFDFB",
+    backgroundColor: "#FDFCF3",
   },
 
   /* ── 헤더 ── */

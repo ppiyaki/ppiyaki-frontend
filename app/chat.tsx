@@ -257,11 +257,13 @@ function UserMessage({
 function AiMessage({ message }: { message: Extract<Message, { role: "ai" }> }) {
   return (
     <View style={styles.aiRow}>
-      <Image
-        source={require("../assets/images/Senior.png")}
-        style={styles.aiAvatar}
-        resizeMode="contain"
-      />
+      <View style={styles.aiAvatarWrap}>
+        <Image
+          source={require("../assets/images/pf/pfimg1.png")}
+          style={styles.aiAvatar}
+          resizeMode="cover"
+        />
+      </View>
       <View style={styles.aiCol}>
         <AppText type="pretendard-b" style={styles.aiName}>
           삐약이
@@ -389,10 +391,21 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 8,
   },
+  aiAvatarWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#FFF4C7",
+    overflow: "hidden",
+    marginTop: 22,
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   aiAvatar: {
-    width: 56,
-    height: 56,
-    marginTop: 18,
+    width: "100%",
+    height: "100%",
   },
   aiCol: {
     flex: 1,

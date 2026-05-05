@@ -49,7 +49,7 @@ export default function PrescriptionFailedScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#FEFDFB",
+    backgroundColor: "#FDFCF3",
   },
   content: {
     flex: 1,

@@ -168,7 +168,7 @@ function MedicationCard({ medication }: { medication: Medication }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#FEFDFB" },
+  safe: { flex: 1, backgroundColor: "#FDFCF3" },
   scroll: { padding: 16, paddingBottom: 24 },
 
   summaryRow: { flexDirection: "row", gap: 10, marginBottom: 18 },

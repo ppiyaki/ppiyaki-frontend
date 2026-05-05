@@ -220,7 +220,7 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#FEFDFB",
+    backgroundColor: "#FDFCF3",
   },
   screen: {
     flex: 1,

@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     borderColor: "#D8C88A",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FEFDFB",
+    backgroundColor: "#FDFCF3",
   },
   logoImg: {
     width: 156,

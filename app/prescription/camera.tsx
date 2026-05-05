@@ -93,7 +93,7 @@ export default function PrescriptionCameraScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#FEFDFB",
+    backgroundColor: "#FDFCF3",
   },
   cameraWrap: {
     flex: 1,

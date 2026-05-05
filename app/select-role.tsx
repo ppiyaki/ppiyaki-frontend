@@ -88,7 +88,7 @@ function RoleImageButton({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#FEFDFB",
+    backgroundColor: "#FDFCF3",
   },
   container: {
     flex: 1,
