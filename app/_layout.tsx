@@ -1,3 +1,4 @@
+import { ConfirmProvider } from "@/contexts/confirm-context";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -57,16 +58,19 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="onboarding" />
-      <Stack.Screen name="select-role" />
-      <Stack.Screen name="senior-connect" />
-      <Stack.Screen name="family-login" />
-      <Stack.Screen name="signup" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-    </Stack>
+    <ConfirmProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="select-role" />
+        <Stack.Screen name="senior-connect" />
+        <Stack.Screen name="family-login" />
+        <Stack.Screen name="signup" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="family" />
+        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+      </Stack>
+    </ConfirmProvider>
   );
 }
 

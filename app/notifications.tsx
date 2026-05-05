@@ -68,7 +68,7 @@ const TIME_META: Record<
   { icon: IoniconName; color: string; bg: string }
 > = {
   morning: { icon: "sunny", color: "#F8B835", bg: "#FFF4D6" },
-  noon: { icon: "restaurant", color: "#5BB04A", bg: "#E5F5D5" },
+  noon: { icon: "restaurant", color: "#5BC4AE", bg: "#D6F1EA" },
   night: { icon: "moon", color: "#6B6B8A", bg: "#E0E0E8" },
 };
 

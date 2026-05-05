@@ -60,7 +60,7 @@ export default function NotificationsScreen() {
 
       <View style={styles.header}>
         <AppText type="pretendard-b" style={styles.title}>
-          어르신을 어떻게 돌볼까요?
+          시니어를 어떻게 돌볼까요?
         </AppText>
         <AppText type="pretendard-r" style={styles.desc}>
           복잡한 알림 설정은 삐약이가 알맞게 맞춰드릴게요.{"\n"}

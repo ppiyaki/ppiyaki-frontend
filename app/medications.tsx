@@ -47,7 +47,7 @@ const TIME_META: Record<
   { icon: IoniconName; color: string; bg: string }
 > = {
   morning: { icon: "sunny", color: "#F8B835", bg: "#FFF4D6" },
-  noon: { icon: "restaurant", color: "#5BB04A", bg: "#E5F5D5" },
+  noon: { icon: "restaurant", color: "#5BC4AE", bg: "#D6F1EA" },
   night: { icon: "moon", color: "#6B6B8A", bg: "#E0E0E8" },
 };
 
@@ -129,7 +129,7 @@ function HospitalSection({ hospital }: { hospital: Hospital }) {
         </View>
         <AppText
           type="pretendard-b"
-          style={[styles.daysLeft, { color: lowStock ? "#E14B4B" : "#5BB04A" }]}
+          style={[styles.daysLeft, { color: lowStock ? "#E14B4B" : "#5BC4AE" }]}
         >
           {hospital.daysLeft}일분 남음
         </AppText>

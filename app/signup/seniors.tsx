@@ -57,7 +57,7 @@ export default function SeniorsScreen() {
       <SignupProgress step={2} />
       <View style={styles.header}>
         <AppText type="pretendard-b" style={styles.title}>
-          보호자 입력
+          관리할 시니어 등록
         </AppText>
         <AppText type="pretendard-r" style={styles.desc}>
           복약을 관리할 시니어의 수와 정보를 설정해주세요.{"\n"}
@@ -94,7 +94,7 @@ export default function SeniorsScreen() {
               seniors.length >= 3 && styles.addBtnTextDisabled,
             ]}
           >
-            + 보호자 추가
+            + 시니어 추가
           </AppText>
         </Pressable>
       </ScrollView>

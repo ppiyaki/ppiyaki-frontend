@@ -30,7 +30,10 @@ export default function SignupCompleteScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Pressable style={styles.btn} onPress={() => router.replace("/(tabs)")}>
+        <Pressable
+          style={styles.btn}
+          onPress={() => router.replace("/family" as any)}
+        >
           <AppText type="pretendard-b" style={styles.btnText}>
             회원가입 완료
           </AppText>

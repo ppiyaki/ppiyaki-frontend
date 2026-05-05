@@ -15,7 +15,7 @@ export default function FamilyLoginScreen() {
     try {
       const { isOnboarded } = await loginWithKakao();
       if (isOnboarded) {
-        router.replace("/(tabs)");
+        router.replace("/family" as any);
       } else {
         router.replace("/signup/nickname" as any);
       }

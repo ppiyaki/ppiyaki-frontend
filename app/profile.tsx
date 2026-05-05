@@ -1,10 +1,10 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import { useConfirm } from "@/contexts/confirm-context";
 import { logoutKakao } from "@/services/auth";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
-  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -30,33 +30,32 @@ interface SubMenuRow {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const confirm = useConfirm();
 
-  const handleLogout = () => {
-    Alert.alert("로그아웃", "정말 로그아웃 하시겠어요?", [
-      { text: "취소", style: "cancel" },
-      {
-        text: "로그아웃",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await logoutKakao();
-          } finally {
-            router.replace("/family-login");
-          }
-        },
-      },
-    ]);
+  const handleLogout = async () => {
+    const ok = await confirm({
+      title: "로그아웃",
+      message: "정말 로그아웃 하시겠어요?",
+      confirmText: "로그아웃",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await logoutKakao();
+    } finally {
+      router.replace("/family-login");
+    }
   };
 
-  const handleWithdraw = () => {
-    Alert.alert(
-      "회원탈퇴",
-      "계정을 정말 삭제하시겠어요?\n복약 기록과 모든 정보가 사라집니다.",
-      [
-        { text: "취소", style: "cancel" },
-        { text: "탈퇴하기", style: "destructive", onPress: () => {} },
-      ],
-    );
+  const handleWithdraw = async () => {
+    const ok = await confirm({
+      title: "회원탈퇴",
+      message: "계정을 정말 삭제하시겠어요?\n복약 기록과 모든 정보가 사라집니다.",
+      confirmText: "탈퇴하기",
+      danger: true,
+    });
+    if (!ok) return;
+    // TODO: 탈퇴 API 연결
   };
 
   const mainActions: MainAction[] = [
