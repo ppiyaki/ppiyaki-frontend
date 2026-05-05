@@ -7,14 +7,44 @@ import { SafeAreaView } from "react-native-safe-area-context";
 type MenuItem = {
   label: string;
   emoji: string;
+  description: string;
+  iconBg: string;
+  arrowColor: string;
   href?: string;
 };
 
 const MENU_ITEMS: MenuItem[] = [
-  { label: "처방전 등록", emoji: "📋", href: "/prescription/intro" },
-  { label: "내 약", emoji: "💊", href: "/medications" },
-  { label: "삐악이 상점", emoji: "🛍️" },
-  { label: "내 정보", emoji: "👤", href: "/profile" },
+  {
+    label: "처방전 등록",
+    emoji: "📋",
+    description: "처방전을 등록해요",
+    iconBg: "#FFF1C8",
+    arrowColor: "#F8B835",
+    href: "/prescription/intro",
+  },
+  {
+    label: "내 약",
+    emoji: "💊",
+    description: "복용 중인 약을 확인해요",
+    iconBg: "#D6F1EA",
+    arrowColor: "#5BC4AE",
+    href: "/medications",
+  },
+  {
+    label: "삐약이 상점",
+    emoji: "🛍️",
+    description: "건강한 생활을 도와드려요",
+    iconBg: "#FFF1C8",
+    arrowColor: "#F8B835",
+  },
+  {
+    label: "내 정보",
+    emoji: "👤",
+    description: "내 정보를 확인해요",
+    iconBg: "#D6F1EA",
+    arrowColor: "#5BC4AE",
+    href: "/profile",
+  },
 ];
 
 export default function HomeScreen() {
@@ -34,14 +64,16 @@ export default function HomeScreen() {
         />
         <View style={styles.pointsBadge}>
           <AppText type="pretendard-b" style={styles.pointsText}>
-            900🥚
+            900
           </AppText>
+          <AppText style={styles.pointsEgg}>🥚</AppText>
         </View>
         <Pressable
           onPress={() => router.push("/notifications" as any)}
           style={styles.notifBtn}
         >
           <Ionicons name="notifications-outline" size={32} color="#555" />
+          <View style={styles.notifDot} />
         </Pressable>
       </View>
 
@@ -67,19 +99,25 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* 사용자 정보 */}
-      <View style={styles.infoRow}>
-        <AppText type="pretendard-m" style={styles.userName}>
-          김복순 님
-        </AppText>
+      {/* 사용자 정보 카드 */}
+      <View style={styles.infoCard}>
+        <View style={styles.userBlock}>
+          <View style={styles.avatarCircle}>
+            <Ionicons name="person" size={20} color="#5BC4AE" />
+          </View>
+          <AppText type="pretendard-b" style={styles.userName}>
+            김복순 님
+          </AppText>
+        </View>
+        <View style={styles.divider} />
         <View style={styles.streakRow}>
-          <AppText type="pretendard-r" style={styles.streakLabel}>
+          <AppText type="pretendard-m" style={styles.streakLabel}>
             복약 연속{" "}
           </AppText>
           <AppText type="extrabold" style={styles.streakNum}>
             90
           </AppText>
-          <AppText type="pretendard-r" style={styles.streakUnit}>
+          <AppText type="pretendard-m" style={styles.streakUnit}>
             일
           </AppText>
         </View>
@@ -92,8 +130,7 @@ export default function HomeScreen() {
             {MENU_ITEMS.slice(row * 2, row * 2 + 2).map((item) => (
               <MenuBtn
                 key={item.label}
-                label={item.label}
-                emoji={item.emoji}
+                item={item}
                 onPress={
                   item.href ? () => router.push(item.href as any) : undefined
                 }
@@ -107,12 +144,10 @@ export default function HomeScreen() {
 }
 
 function MenuBtn({
-  label,
-  emoji,
+  item,
   onPress,
 }: {
-  label: string;
-  emoji: string;
+  item: MenuItem;
   onPress?: () => void;
 }) {
   return (
@@ -123,10 +158,20 @@ function MenuBtn({
         pressed && styles.menuBtnPressed,
       ]}
     >
-      <AppText style={styles.menuEmoji}>{emoji}</AppText>
-      <AppText type="pretendard-s" style={styles.menuLabel}>
-        {label}
+      <View style={[styles.iconCircle, { backgroundColor: item.iconBg }]}>
+        <AppText style={styles.menuEmoji}>{item.emoji}</AppText>
+      </View>
+      <AppText type="pretendard-b" style={styles.menuLabel}>
+        {item.label}
       </AppText>
+      <View style={styles.menuFooter}>
+        <AppText type="pretendard-r" style={styles.menuDesc}>
+          {item.description}
+        </AppText>
+        <View style={[styles.arrowCircle, { backgroundColor: item.iconBg }]}>
+          <Ionicons name="chevron-forward" size={14} color={item.arrowColor} />
+        </View>
+      </View>
     </Pressable>
   );
 }
@@ -143,24 +188,46 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 12,
+    gap: 12,
   },
   logo: {
     width: 80,
     height: 32,
   },
   pointsBadge: {
-    flex: 1,
+    marginLeft: "auto",
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
   },
   pointsText: {
-    fontSize: 16,
-    color: "#333",
+    fontSize: 18,
+    color: "#222",
+  },
+  pointsEgg: {
+    fontSize: 18,
   },
   notifBtn: {
     width: 36,
     height: 36,
     justifyContent: "center",
     alignItems: "center",
+  },
+  notifDot: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF4848",
   },
 
   /* ── 캐릭터 ── */
@@ -210,34 +277,62 @@ const styles = StyleSheet.create({
     color: "#333",
   },
 
-  /* ── 사용자 정보 ── */
-  infoRow: {
+  /* ── 사용자 정보 카드 ── */
+  infoCard: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    backgroundColor: "#FFF",
+    marginHorizontal: 16,
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+  },
+  userBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  avatarCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#D6F1EA",
+    justifyContent: "center",
+    alignItems: "center",
   },
   userName: {
     fontSize: 17,
-    color: "#444",
+    color: "#222",
+  },
+  divider: {
+    width: 1,
+    height: 32,
+    backgroundColor: "#E5E5E5",
+    marginHorizontal: 12,
   },
   streakRow: {
     flexDirection: "row",
     alignItems: "baseline",
+    flex: 1,
+    justifyContent: "flex-end",
   },
   streakLabel: {
     fontSize: 14,
-    color: "#777",
+    color: "#444",
   },
   streakNum: {
-    fontSize: 32,
-    color: "#F88835",
-    lineHeight: 36,
+    fontSize: 30,
+    color: "#F8B835",
+    lineHeight: 34,
+    marginHorizontal: 2,
   },
   streakUnit: {
     fontSize: 14,
-    color: "#777",
+    color: "#444",
     marginLeft: 2,
   },
 
@@ -253,29 +348,50 @@ const styles = StyleSheet.create({
   },
   menuBtn: {
     flex: 1,
-    aspectRatio: 1.3,
+    aspectRatio: 1,
     backgroundColor: "#FFF",
     borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    justifyContent: "space-between",
     borderWidth: 1,
-    borderColor: "#EDE8D6",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: "#F1ECDB",
   },
   menuBtnPressed: {
     backgroundColor: "#FBF7EC",
     transform: [{ scale: 0.97 }],
   },
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "flex-start",
+  },
   menuEmoji: {
-    fontSize: 32,
+    fontSize: 28,
   },
   menuLabel: {
-    fontSize: 15,
-    color: "#333",
+    fontSize: 18,
+    color: "#222",
+    marginTop: 4,
+  },
+  menuFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  menuDesc: {
+    fontSize: 11,
+    color: "#888",
+    flex: 1,
+  },
+  arrowCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

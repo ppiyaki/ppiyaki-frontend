@@ -49,7 +49,10 @@ const TIME_META: Record<TimeOfDay, { icon: string; bg: string }> = {
 
 export default function MedicationsScreen() {
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={["top", "left", "right", "bottom"]}
+    >
       <PageHeader title="내 약 정보" />
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -68,7 +71,7 @@ export default function MedicationsScreen() {
           style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
         >
           <AppText type="pretendard-b" style={styles.ctaText}>
-            삐악이에게 물어보기
+            삐약이에게 물어보기
           </AppText>
         </Pressable>
       </View>
@@ -122,10 +125,7 @@ function HospitalSection({ hospital }: { hospital: Hospital }) {
         </View>
         <AppText
           type="pretendard-b"
-          style={[
-            styles.daysLeft,
-            { color: lowStock ? "#E14B4B" : "#5BB04A" },
-          ]}
+          style={[styles.daysLeft, { color: lowStock ? "#E14B4B" : "#5BB04A" }]}
         >
           {hospital.daysLeft}일분 남음
         </AppText>

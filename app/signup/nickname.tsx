@@ -31,7 +31,7 @@ export default function NicknameScreen() {
             닉네임 입력
           </AppText>
           <AppText type="pretendard-r" style={styles.desc}>
-            삐악이에서 사용할 닉네임을 정해주세요!{"\n"}
+            삐약이에서 사용할 닉네임을 정해주세요!{"\n"}
             그냥 이름이어도, 개성있는 닉네임이어도 좋아요.
           </AppText>
 

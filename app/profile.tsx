@@ -36,6 +36,7 @@ export default function ProfileScreen() {
     { label: "내 정보 수정" },
     { label: "내 보호자 정보" },
     { label: "알림 끄기/켜기" },
+    { label: "문의 및 신고" },
     { label: "로그아웃", onPress: handleLogout },
     { label: "회원탈퇴", danger: true },
   ];
@@ -57,7 +58,7 @@ export default function ProfileScreen() {
                 resizeMode="contain"
               />
               <AppText type="pretendard-r" style={styles.avatarLabel}>
-                성체 삐악이
+                성체 삐약이
               </AppText>
             </View>
             <View style={styles.cardInfo}>
@@ -81,7 +82,7 @@ export default function ProfileScreen() {
 
           <View style={styles.cardBottomRow}>
             <AppText type="pretendard-b" style={styles.cardBrand}>
-              삐악이 카드
+              삐약이 카드
             </AppText>
             <AppText type="pretendard-r" style={styles.cardDate}>
               2026.04.28
@@ -177,7 +178,7 @@ const styles = StyleSheet.create({
   cardBrand: { fontSize: 16, color: "#E14B4B" },
   cardDate: { fontSize: 13, color: "#7A5C00" },
 
-  menu: { marginTop: 64, gap: 24 },
+  menu: { marginTop: 40, gap: 20 },
   menuRow: {
     flexDirection: "row",
     alignItems: "center",
