@@ -1,11 +1,12 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
-import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { ComponentProps, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type TimeOfDay = "morning" | "noon" | "night";
+type IoniconName = ComponentProps<typeof Ionicons>["name"];
 
 interface Medication {
   name: string;
@@ -41,10 +42,13 @@ const HOSPITALS: Hospital[] = [
   },
 ];
 
-const TIME_META: Record<TimeOfDay, { icon: string; bg: string }> = {
-  morning: { icon: "☀️", bg: "#FFF4D6" },
-  noon: { icon: "🍽️", bg: "#E5F5D5" },
-  night: { icon: "🌙", bg: "#E0E0E8" },
+const TIME_META: Record<
+  TimeOfDay,
+  { icon: IoniconName; color: string; bg: string }
+> = {
+  morning: { icon: "sunny", color: "#F8B835", bg: "#FFF4D6" },
+  noon: { icon: "restaurant", color: "#5BB04A", bg: "#E5F5D5" },
+  night: { icon: "moon", color: "#6B6B8A", bg: "#E0E0E8" },
 };
 
 export default function MedicationsScreen() {
@@ -143,7 +147,7 @@ function MedicationCard({ medication }: { medication: Medication }) {
   return (
     <View style={styles.medCard}>
       <View style={styles.medThumb}>
-        <AppText style={{ fontSize: 30 }}>💊</AppText>
+        <MaterialCommunityIcons name="pill" size={32} color="#F8B835" />
       </View>
       <View style={{ flex: 1 }}>
         <AppText type="pretendard-b" style={styles.medName}>
@@ -158,7 +162,11 @@ function MedicationCard({ medication }: { medication: Medication }) {
               key={t}
               style={[styles.timePill, { backgroundColor: TIME_META[t].bg }]}
             >
-              <AppText style={{ fontSize: 14 }}>{TIME_META[t].icon}</AppText>
+              <Ionicons
+                name={TIME_META[t].icon}
+                size={14}
+                color={TIME_META[t].color}
+              />
             </View>
           ))}
         </View>

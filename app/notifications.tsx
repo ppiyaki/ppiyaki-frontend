@@ -1,10 +1,12 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { Ionicons } from "@expo/vector-icons";
+import { ComponentProps } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type TimeOfDay = "morning" | "noon" | "night";
+type IoniconName = ComponentProps<typeof Ionicons>["name"];
 
 interface NotifItem {
   title: string;
@@ -61,10 +63,13 @@ const NOTIF_GROUPS: NotifGroup[] = [
   },
 ];
 
-const TIME_META: Record<TimeOfDay, { icon: string; bg: string }> = {
-  morning: { icon: "☀️", bg: "#FFF4D6" },
-  noon: { icon: "🍽️", bg: "#E5F5D5" },
-  night: { icon: "🌙", bg: "#E0E0E8" },
+const TIME_META: Record<
+  TimeOfDay,
+  { icon: IoniconName; color: string; bg: string }
+> = {
+  morning: { icon: "sunny", color: "#F8B835", bg: "#FFF4D6" },
+  noon: { icon: "restaurant", color: "#5BB04A", bg: "#E5F5D5" },
+  night: { icon: "moon", color: "#6B6B8A", bg: "#E0E0E8" },
 };
 
 export default function NotificationsScreen() {
@@ -95,7 +100,7 @@ function NotifCard({ item }: { item: NotifItem }) {
   return (
     <View style={styles.card}>
       <Image
-        source={require("../assets/images/Senior.png")}
+        source={require("../assets/images/character/Senior3.png")}
         style={styles.avatar}
         resizeMode="contain"
       />
@@ -112,9 +117,11 @@ function NotifCard({ item }: { item: NotifItem }) {
             { backgroundColor: TIME_META[item.time].bg },
           ]}
         >
-          <AppText style={{ fontSize: 13 }}>
-            {TIME_META[item.time].icon}
-          </AppText>
+          <Ionicons
+            name={TIME_META[item.time].icon}
+            size={13}
+            color={TIME_META[item.time].color}
+          />
         </View>
       </View>
       {item.status === "pending" ? (

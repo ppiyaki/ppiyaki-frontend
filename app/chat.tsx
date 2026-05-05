@@ -275,7 +275,7 @@ function AiMessage({ message }: { message: Extract<Message, { role: "ai" }> }) {
           <Pressable style={styles.listenBtn}>
             <Ionicons name="volume-high" size={16} color="#5BC4AE" />
             <AppText type="pretendard-b" style={styles.listenText}>
-              자세히 듣기
+              다시 듣기
             </AppText>
           </Pressable>
         </View>

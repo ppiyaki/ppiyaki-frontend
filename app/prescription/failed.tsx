@@ -24,7 +24,7 @@ export default function PrescriptionFailedScreen() {
 
         <View style={styles.characterWrap}>
           <Image
-            source={require("../../assets/images/sad.png")}
+            source={require("../../assets/images/character/sad.png")}
             style={styles.character}
             resizeMode="contain"
           />

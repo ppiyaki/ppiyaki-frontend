@@ -1,5 +1,6 @@
 import AppText from "@/components/app-text";
 import SignupProgress from "@/components/signup-progress";
+import { useSignup } from "@/contexts/signup-context";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -14,7 +15,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function NicknameScreen() {
   const router = useRouter();
-  const [nickname, setNickname] = useState("");
+  const { nickname: ctxNickname, setNickname: setCtxNickname } = useSignup();
+  const [nickname, setNickname] = useState(ctxNickname);
+  const trimmed = nickname.trim();
+  const canProceed = trimmed.length > 0;
 
   return (
     <SafeAreaView
@@ -54,8 +58,12 @@ export default function NicknameScreen() {
 
         <View style={styles.footer}>
           <Pressable
-            style={styles.btn}
-            onPress={() => router.push("/signup/seniors" as any)}
+            style={[styles.btn, !canProceed && styles.btnDisabled]}
+            disabled={!canProceed}
+            onPress={() => {
+              setCtxNickname(trimmed);
+              router.push("/signup/seniors" as any);
+            }}
           >
             <AppText type="pretendard-b" style={styles.btnText}>
               다음
@@ -124,6 +132,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
+  },
+  btnDisabled: {
+    opacity: 0.45,
   },
   btnText: {
     fontSize: 18,

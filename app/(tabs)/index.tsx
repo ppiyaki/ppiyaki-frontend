@@ -1,14 +1,20 @@
 import AppText from "@/components/app-text";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import {
+  Image,
+  ImageSourcePropType,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type MenuItem = {
   label: string;
-  emoji: string;
+  icon: ImageSourcePropType;
   description: string;
-  iconBg: string;
+  arrowBg: string;
   arrowColor: string;
   href?: string;
 };
@@ -16,32 +22,33 @@ type MenuItem = {
 const MENU_ITEMS: MenuItem[] = [
   {
     label: "처방전 등록",
-    emoji: "📋",
+    icon: require("../../assets/images/icon/prescript.png"),
     description: " ",
-    iconBg: "#FFF1C8",
+    arrowBg: "#FFF1C8",
     arrowColor: "#F8B835",
     href: "/prescription/intro",
   },
   {
     label: "내 약",
-    emoji: "💊",
+    icon: require("../../assets/images/icon/medicine.png"),
     description: " ",
-    iconBg: "#D6F1EA",
+    arrowBg: "#D6F1EA",
     arrowColor: "#5BC4AE",
     href: "/medications",
   },
   {
-    label: "삐약이 상점",
-    emoji: "🛍️",
+    label: "삐약이 성장기록",
+    icon: require("../../assets/images/icon/ppiyaki.png"),
     description: " ",
-    iconBg: "#FFF1C8",
+    arrowBg: "#FFF1C8",
     arrowColor: "#F8B835",
+    href: "/growth",
   },
   {
     label: "내 정보",
-    emoji: "👤",
+    icon: require("../../assets/images/icon/profile.png"),
     description: " ",
-    iconBg: "#D6F1EA",
+    arrowBg: "#D6F1EA",
     arrowColor: "#5BC4AE",
     href: "/profile",
   },
@@ -66,7 +73,11 @@ export default function HomeScreen() {
           <AppText type="pretendard-b" style={styles.pointsText}>
             900
           </AppText>
-          <AppText style={styles.pointsEgg}>🥚</AppText>
+          <MaterialCommunityIcons
+            name="egg-outline"
+            size={18}
+            color="#F8B835"
+          />
         </View>
         <Pressable
           onPress={() => router.push("/notifications" as any)}
@@ -81,7 +92,7 @@ export default function HomeScreen() {
       <View style={styles.characterSection}>
         <View style={styles.characterWrap}>
           <Image
-            source={require("../../assets/images/Senior.png")}
+            source={require("../../assets/images/character/Senior3.png")}
             style={styles.characterImg}
             resizeMode="contain"
           />
@@ -113,7 +124,7 @@ export default function HomeScreen() {
         <View style={styles.divider} />
         <View style={styles.streakRow}>
           <AppText type="pretendard-m" style={styles.streakLabel}>
-            복약 연속{" "}
+            연속 복약{" "}
           </AppText>
           <AppText type="extrabold" style={styles.streakNum}>
             90
@@ -153,9 +164,7 @@ function MenuBtn({ item, onPress }: { item: MenuItem; onPress?: () => void }) {
         pressed && styles.menuBtnPressed,
       ]}
     >
-      <View style={[styles.iconCircle, { backgroundColor: item.iconBg }]}>
-        <AppText style={styles.menuEmoji}>{item.emoji}</AppText>
-      </View>
+      <Image source={item.icon} style={styles.menuIcon} resizeMode="contain" />
       <AppText type="pretendard-b" style={styles.menuLabel}>
         {item.label}
       </AppText>
@@ -163,7 +172,7 @@ function MenuBtn({ item, onPress }: { item: MenuItem; onPress?: () => void }) {
         <AppText type="pretendard-r" style={styles.menuDesc}>
           {item.description}
         </AppText>
-        <View style={[styles.arrowCircle, { backgroundColor: item.iconBg }]}>
+        <View style={[styles.arrowCircle, { backgroundColor: item.arrowBg }]}>
           <Ionicons name="chevron-forward" size={14} color={item.arrowColor} />
         </View>
       </View>
@@ -205,9 +214,6 @@ const styles = StyleSheet.create({
   pointsText: {
     fontSize: 18,
     color: "#222",
-  },
-  pointsEgg: {
-    fontSize: 18,
   },
   notifBtn: {
     width: 36,
@@ -356,16 +362,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FBF7EC",
     transform: [{ scale: 0.97 }],
   },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
-    alignItems: "center",
+  menuIcon: {
+    width: 60,
+    height: 60,
     alignSelf: "flex-start",
-  },
-  menuEmoji: {
-    fontSize: 28,
   },
   menuLabel: {
     fontSize: 18,

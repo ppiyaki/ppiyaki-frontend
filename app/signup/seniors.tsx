@@ -45,6 +45,10 @@ export default function SeniorsScreen() {
     );
   };
 
+  const canProceed = seniors.every(
+    (s) => s.name.trim().length > 0 && s.gender !== null,
+  );
+
   return (
     <SafeAreaView
       style={styles.safe}
@@ -97,7 +101,8 @@ export default function SeniorsScreen() {
 
       <View style={styles.footer}>
         <Pressable
-          style={styles.btn}
+          style={[styles.btn, !canProceed && styles.btnDisabled]}
+          disabled={!canProceed}
           onPress={() => {
             setCtxSeniors(seniors);
             router.push("/signup/notifications" as any);
@@ -237,6 +242,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
+  },
+  btnDisabled: {
+    opacity: 0.45,
   },
   btnText: {
     fontSize: 18,

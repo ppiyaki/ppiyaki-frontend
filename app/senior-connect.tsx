@@ -1,13 +1,7 @@
 import AppText from "@/components/app-text";
-import { useRef, useState } from "react";
 import { useRouter } from "expo-router";
-import {
-  Image,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from "react-native";
+import { useRef, useState } from "react";
+import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SeniorConnectScreen() {
@@ -17,7 +11,10 @@ export default function SeniorConnectScreen() {
   const canConnect = code.length === 6;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={["top", "left", "right", "bottom"]}
+    >
       <View style={styles.inner}>
         <View style={styles.logoBox}>
           <Image
@@ -28,7 +25,7 @@ export default function SeniorConnectScreen() {
         </View>
 
         <Image
-          source={require("../assets/images/Senior.png")}
+          source={require("../assets/images/character/Senior3.png")}
           style={styles.character}
           resizeMode="contain"
         />
@@ -68,10 +65,7 @@ function OtpInput({
   inputRef: React.RefObject<TextInput | null>;
 }) {
   return (
-    <Pressable
-      style={otp.wrapper}
-      onPress={() => inputRef.current?.focus()}
-    >
+    <Pressable style={otp.wrapper} onPress={() => inputRef.current?.focus()}>
       {/* 보이지 않는 실제 입력 필드 — 전체 영역 커버 */}
       <TextInput
         ref={inputRef}

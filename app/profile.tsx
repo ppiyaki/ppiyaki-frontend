@@ -61,12 +61,6 @@ export default function ProfileScreen() {
 
   const mainActions: MainAction[] = [
     {
-      label: "내 정보 보기",
-      icon: "person-circle-outline",
-      iconColor: "#5BC4AE",
-      iconBg: "#D6F1EA",
-    },
-    {
       label: "내 정보 수정",
       icon: "create-outline",
       iconColor: "#F8B835",
@@ -83,7 +77,7 @@ export default function ProfileScreen() {
   const subMenu: SubMenuRow[] = [
     { label: "내 보호자 정보" },
     { label: "문의 및 신고" },
-    { label: "로그아웃", onPress: handleLogout },
+    { label: "계정 나가기", onPress: handleLogout },
   ];
 
   return (
@@ -110,9 +104,6 @@ export default function ProfileScreen() {
             <View style={styles.cardInfo}>
               <AppText type="pretendard-b" style={styles.userName}>
                 김복순님
-              </AppText>
-              <AppText type="pretendard-m" style={styles.userMeta}>
-                60세 / 여
               </AppText>
               <View style={styles.streakBadge}>
                 <AppText type="pretendard-m" style={styles.streakLabel}>
@@ -278,10 +269,6 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 26,
     color: "#222",
-  },
-  userMeta: {
-    fontSize: 18,
-    color: "#5A4500",
   },
   streakBadge: {
     flexDirection: "row",

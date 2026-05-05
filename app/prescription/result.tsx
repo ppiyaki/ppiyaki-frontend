@@ -45,7 +45,7 @@ export default function PrescriptionResultScreen() {
             </AppText>
           </View>
           <Image
-            source={require("../../assets/images/Senior.png")}
+            source={require("../../assets/images/character/Senior3.png")}
             style={styles.character}
             resizeMode="contain"
           />
