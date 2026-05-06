@@ -1,6 +1,7 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { ComponentProps } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -97,6 +98,7 @@ export default function NotificationsScreen() {
 }
 
 function NotifCard({ item }: { item: NotifItem }) {
+  const router = useRouter();
   return (
     <View style={styles.card}>
       <Image
@@ -125,7 +127,13 @@ function NotifCard({ item }: { item: NotifItem }) {
         </View>
       </View>
       {item.status === "pending" ? (
-        <Pressable style={styles.confirmBtn}>
+        <Pressable
+          onPress={() => router.push("/dose-confirm/intro" as any)}
+          style={({ pressed }) => [
+            styles.confirmBtn,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
           <AppText type="pretendard-b" style={styles.confirmText}>
             확인
           </AppText>

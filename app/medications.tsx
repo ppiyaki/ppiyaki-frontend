@@ -1,6 +1,7 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { ComponentProps, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -52,6 +53,7 @@ const TIME_META: Record<
 };
 
 export default function MedicationsScreen() {
+  const router = useRouter();
   return (
     <SafeAreaView
       style={styles.safe}
@@ -72,6 +74,7 @@ export default function MedicationsScreen() {
 
       <View style={styles.footer}>
         <Pressable
+          onPress={() => router.push("/chat" as any)}
           style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
         >
           <AppText type="pretendard-b" style={styles.ctaText}>

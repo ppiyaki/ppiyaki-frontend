@@ -48,7 +48,7 @@ export default function ProfileScreen() {
   };
 
   const handleWithdraw = () => {
-    router.push("/settings/withdraw" as any);
+    router.push("/settings/senior-withdraw" as any);
   };
 
   const mainActions: MainAction[] = [
@@ -57,6 +57,7 @@ export default function ProfileScreen() {
       icon: "create-outline",
       iconColor: "#F8B835",
       iconBg: "#FFF1C8",
+      onPress: () => router.push("/settings/edit-profile" as any),
     },
     {
       label: "설정",
