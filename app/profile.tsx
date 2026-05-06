@@ -47,15 +47,8 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleWithdraw = async () => {
-    const ok = await confirm({
-      title: "회원탈퇴",
-      message: "계정을 정말 삭제하시겠어요?\n복약 기록과 모든 정보가 사라집니다.",
-      confirmText: "탈퇴하기",
-      danger: true,
-    });
-    if (!ok) return;
-    // TODO: 탈퇴 API 연결
+  const handleWithdraw = () => {
+    router.push("/settings/withdraw" as any);
   };
 
   const mainActions: MainAction[] = [

@@ -10,6 +10,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type Period = "day" | "week" | "month";
@@ -42,9 +43,11 @@ export default function FamilyRecordScreen() {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        {period === "day" && <DailyView />}
-        {period === "week" && <WeeklyView />}
-        {period === "month" && <MonthlyView />}
+        <Animated.View key={period} entering={FadeIn.duration(180)}>
+          {period === "day" && <DailyView />}
+          {period === "week" && <WeeklyView />}
+          {period === "month" && <MonthlyView />}
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -555,7 +558,7 @@ function paletteFor(status: DoseStatus) {
 /* ──────────────────────── 월간 ──────────────────────── */
 
 const MONTH_LABEL = "2026년 6월";
-const FIRST_DAY_OFFSET = 3; // 6/1이 수요일
+const FIRST_DAY_OFFSET = 3;
 const DAYS_IN_MONTH = 30;
 
 const MONTH_STATUS: Record<number, DoseStatus> = {
@@ -600,17 +603,17 @@ function MonthlyView() {
           </AppText>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Pressable style={s.monthNavBtn}>
-              <Ionicons name="chevron-back" size={18} color="#5BC4AE" />
+              <Ionicons name="chevron-back" size={18} color="#515151" />
             </Pressable>
             <Pressable style={s.monthNavBtn}>
-              <Ionicons name="chevron-forward" size={18} color="#5BC4AE" />
+              <Ionicons name="chevron-forward" size={18} color="#515151" />
             </Pressable>
           </View>
         </View>
 
         <View style={s.weekHeader}>
           {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
-            <AppText key={d} type="pretendard-m" style={s.weekHeaderText}>
+            <AppText key={d} type="pretendard-r" style={s.weekHeaderText}>
               {d}
             </AppText>
           ))}
@@ -691,7 +694,7 @@ function CalendarCell({ date }: { date: number | null }) {
     <View style={s.calendarCell}>
       <View style={[s.calendarDot, { backgroundColor: bg }]}>
         <AppText
-          type={status || isToday ? "pretendard-b" : "pretendard-m"}
+          type={isToday ? "pretendard-b" : "pretendard-r"}
           style={[s.calendarText, { color: textColor }]}
         >
           {date}

@@ -129,13 +129,15 @@ export default function FamilyProfileScreen() {
               iconColor="#5BC4AE"
               iconBg="#D6F1EA"
               label="모니터링 / 알림 설정"
+              onPress={() => router.push("/settings/monitoring" as any)}
             />
-            {/* <SettingRow
-              icon="phone-portrait-outline"
+            <SettingRow
+              icon="information-circle-outline"
               iconColor="#F8B835"
               iconBg="#FFF1C8"
-              label="앱 사용 설정"
-            /> */}
+              label="앱 정보"
+              onPress={() => router.push("/settings/app-info" as any)}
+            />
             <SettingRow
               icon="help-circle-outline"
               iconColor="#F8B835"
@@ -150,11 +152,11 @@ export default function FamilyProfileScreen() {
               onPress={handleLogout}
             />
             <SettingRow
-              icon="remove"
+              icon="remove-circle-outline"
               iconColor="#C95C5C"
-              iconBg="#ffe8e8"
+              iconBg="#FCEBEB"
               label="회원탈퇴"
-              onPress={handleLogout}
+              onPress={() => router.push("/settings/withdraw" as any)}
             />
           </View>
         </View>
