@@ -1,10 +1,11 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
+import { getMe } from "@/services/auth";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Image,
   ImageSourcePropType,
@@ -36,7 +37,7 @@ const PRESETS: PresetImage[] = [
 const GENDERS: Gender[] = ["남", "여", "비공개"];
 
 const INITIAL = {
-  name: "김복순",
+  name: "",
   gender: "여" as Gender,
   presetId: "p4" as string | null,
   customUri: null as string | null,
@@ -46,14 +47,33 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const confirm = useConfirm();
 
+  const [initialName, setInitialName] = useState(INITIAL.name);
   const [name, setName] = useState(INITIAL.name);
   const [gender, setGender] = useState<Gender>(INITIAL.gender);
   const [presetId, setPresetId] = useState<string | null>(INITIAL.presetId);
   const [customUri, setCustomUri] = useState<string | null>(INITIAL.customUri);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // 서버에서 현재 닉네임 로드 (저장 API는 아직 없음 — UI 표시만)
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const me = await getMe();
+        if (cancelled) return;
+        setInitialName(me.nickname);
+        setName(me.nickname);
+      } catch {
+        // 무시
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const dirty =
-    name.trim() !== INITIAL.name ||
+    name.trim() !== initialName ||
     gender !== INITIAL.gender ||
     presetId !== INITIAL.presetId ||
     customUri !== INITIAL.customUri;

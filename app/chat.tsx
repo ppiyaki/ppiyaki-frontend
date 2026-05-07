@@ -18,6 +18,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Speech from "expo-speech";
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -116,9 +117,7 @@ export default function ChatScreen() {
     onChunk: (chunk: string) => {
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === aiId && m.role === "ai"
-            ? { ...m, text: m.text + chunk }
-            : m,
+          m.id === aiId && m.role === "ai" ? { ...m, text: m.text + chunk } : m,
         ),
       );
     },
@@ -327,10 +326,7 @@ export default function ChatScreen() {
   };
 
   return (
-    <SafeAreaView
-      style={styles.safe}
-      edges={["top", "left", "right"]}
-    >
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <PageHeader title="대화하기" />
 
       <KeyboardAvoidingView
@@ -348,18 +344,21 @@ export default function ChatScreen() {
           }
           keyboardShouldPersistTaps="handled"
         >
-          {messages.map((msg) =>
-            msg.role === "user" ? (
-              <UserMessage key={msg.id} message={msg} />
-            ) : (
+          {messages.map((msg, idx) => {
+            if (msg.role === "user") {
+              return <UserMessage key={msg.id} message={msg} />;
+            }
+            const isLast = idx === messages.length - 1;
+            return (
               <AiMessage
                 key={msg.id}
                 message={msg}
                 speaking={speakingId === msg.id}
+                streaming={streaming && isLast}
                 onSpeak={() => handleSpeakAi(msg.id, msg.text)}
               />
-            ),
-          )}
+            );
+          })}
         </ScrollView>
 
         {/* 사진 미리보기 */}
@@ -446,7 +445,7 @@ export default function ChatScreen() {
               <View style={styles.dockHint}>
                 <View style={styles.wave} />
                 <AppText type="pretendard-m" style={styles.dockHintText}>
-                  버튼을 누르고 질문해보세요
+                  아래 노란 마이크를 눌러 질문해보세요
                 </AppText>
                 <View style={styles.wave} />
               </View>
@@ -598,12 +597,15 @@ function UserMessage({
 function AiMessage({
   message,
   speaking,
+  streaming,
   onSpeak,
 }: {
   message: Extract<Message, { role: "ai" }>;
   speaking: boolean;
+  streaming: boolean;
   onSpeak: () => void;
 }) {
+  const empty = !message.text;
   return (
     <View style={styles.aiRow}>
       <View style={styles.aiAvatarWrap}>
@@ -618,27 +620,44 @@ function AiMessage({
           삐약이
         </AppText>
         <View style={styles.aiBubble}>
-          <AppText type="pretendard-b" style={styles.aiText}>
-            {message.text}
-          </AppText>
-          <Pressable
-            onPress={onSpeak}
-            disabled={!message.text}
-            style={({ pressed }) => [
-              styles.listenBtn,
-              speaking && { backgroundColor: "#D6F1EA" },
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Ionicons
-              name={speaking ? "stop" : "volume-high"}
-              size={16}
-              color="#5BC4AE"
-            />
-            <AppText type="pretendard-b" style={styles.listenText}>
-              {speaking ? "멈추기" : "다시 듣기"}
+          {streaming && empty ? (
+            <View style={styles.thinkingRow}>
+              <ActivityIndicator size="small" color="#5BC4AE" />
+              <AppText type="pretendard-b" style={styles.thinkingText}>
+                답변을 준비하고 있어요…
+              </AppText>
+            </View>
+          ) : (
+            <AppText type="pretendard-b" style={styles.aiText}>
+              {message.text}
+              {streaming && (
+                <AppText type="pretendard-b" style={styles.streamCaret}>
+                  {" "}
+                  ▍
+                </AppText>
+              )}
             </AppText>
-          </Pressable>
+          )}
+          {!streaming && !empty && (
+            <Pressable
+              onPress={onSpeak}
+              disabled={!message.text}
+              style={({ pressed }) => [
+                styles.listenBtn,
+                speaking && { backgroundColor: "#D6F1EA" },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Ionicons
+                name={speaking ? "stop" : "volume-high"}
+                size={16}
+                color="#5BC4AE"
+              />
+              <AppText type="pretendard-b" style={styles.listenText}>
+                {speaking ? "멈추기" : "다시 듣기"}
+              </AppText>
+            </Pressable>
+          )}
         </View>
         <AppText type="pretendard-r" style={styles.timeLeft}>
           {message.time}
@@ -803,6 +822,19 @@ const styles = StyleSheet.create({
   },
   listenText: {
     fontSize: 14,
+    color: "#5BC4AE",
+  },
+  thinkingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 4,
+  },
+  thinkingText: {
+    fontSize: 16,
+    color: "#5BC4AE",
+  },
+  streamCaret: {
     color: "#5BC4AE",
   },
   timeLeft: {

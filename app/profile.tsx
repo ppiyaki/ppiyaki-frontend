@@ -1,9 +1,10 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
-import { logoutKakao } from "@/services/auth";
+import { getMe, logoutKakao } from "@/services/auth";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   Image,
   Pressable,
@@ -31,6 +32,24 @@ interface SubMenuRow {
 export default function ProfileScreen() {
   const router = useRouter();
   const confirm = useConfirm();
+  const [nickname, setNickname] = useState<string>("");
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void (async () => {
+        try {
+          const me = await getMe();
+          if (!cancelled) setNickname(me.nickname);
+        } catch {
+          // 무시
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   const handleLogout = async () => {
     const ok = await confirm({
@@ -104,7 +123,7 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.cardInfo}>
               <AppText type="pretendard-b" style={styles.userName}>
-                김복순님
+                {nickname ? `${nickname}님` : " "}
               </AppText>
               <View style={styles.streakBadge}>
                 <AppText type="pretendard-m" style={styles.streakLabel}>

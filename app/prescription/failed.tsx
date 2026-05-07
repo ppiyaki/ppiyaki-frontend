@@ -19,7 +19,7 @@ export default function PrescriptionFailedScreen() {
           처방전이 인식되지 않았어요😢
         </AppText>
         <AppText type="pretendard-m" style={styles.subtitle}>
-          아래 버튼을 눌러 다시 시도해주세요
+          아래 '다시 시도하기'를 눌러주세요
         </AppText>
 
         <View style={styles.characterWrap}>

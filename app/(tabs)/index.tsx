@@ -1,6 +1,8 @@
 import AppText from "@/components/app-text";
+import { getMe } from "@/services/auth";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   Image,
   ImageSourcePropType,
@@ -56,6 +58,24 @@ const MENU_ITEMS: MenuItem[] = [
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [nickname, setNickname] = useState<string>("");
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void (async () => {
+        try {
+          const me = await getMe();
+          if (!cancelled) setNickname(me.nickname);
+        } catch {
+          // 무시
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   return (
     <SafeAreaView
@@ -118,7 +138,7 @@ export default function HomeScreen() {
             <Ionicons name="person" size={20} color="#5BC4AE" />
           </View>
           <AppText type="pretendard-b" style={styles.userName}>
-            김복순 님
+            {nickname ? `${nickname} 님` : "  "}
           </AppText>
         </View>
         <View style={styles.divider} />

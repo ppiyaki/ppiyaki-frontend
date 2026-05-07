@@ -1,8 +1,10 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { Badge, BADGES } from "@/data/badges";
+import { getMe } from "@/services/auth";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   Image,
   ImageSourcePropType,
@@ -66,6 +68,25 @@ const EGG_COUNT = 900;
 
 export default function GrowthScreen() {
   const router = useRouter();
+  const [nickname, setNickname] = useState<string>("");
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void (async () => {
+        try {
+          const me = await getMe();
+          if (!cancelled) setNickname(me.nickname);
+        } catch {
+          // 무시
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
   const currentStageIdx = getCurrentStageIdx(STREAK_DAYS);
   const currentStage = STAGES[currentStageIdx];
   const nextStage = STAGES[currentStageIdx + 1];
@@ -104,7 +125,8 @@ export default function GrowthScreen() {
               {currentStage.label}
             </AppText>
             <AppText type="pretendard-m" style={styles.heroDesc}>
-              김복순님은 진정한 건강 왕!{"\n"}삐약이가 계속 지켜드릴게요.
+              {nickname ? `${nickname}님은 진정한 건강 왕!` : "진정한 건강 왕!"}
+              {"\n"}삐약이가 계속 지켜드릴게요.
             </AppText>
           </View>
 
