@@ -7,7 +7,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function DoseConfirmPreviewScreen() {
   const router = useRouter();
-  const { uri } = useLocalSearchParams<{ uri?: string }>();
+  const { uri, scheduleId, targetDate, attempts } = useLocalSearchParams<{
+    uri?: string;
+    scheduleId?: string;
+    targetDate?: string;
+    attempts?: string;
+  }>();
 
   return (
     <SafeAreaView
@@ -50,7 +55,12 @@ export default function DoseConfirmPreviewScreen() {
 
       <View style={styles.footer}>
         <Pressable
-          onPress={() => router.replace("/dose-confirm/camera" as any)}
+          onPress={() =>
+            router.replace({
+              pathname: "/dose-confirm/camera" as any,
+              params: { scheduleId, targetDate, attempts },
+            })
+          }
           style={({ pressed }) => [
             styles.btn,
             styles.btnSecondary,
@@ -66,7 +76,7 @@ export default function DoseConfirmPreviewScreen() {
           onPress={() =>
             router.replace({
               pathname: "/dose-confirm/analyzing" as any,
-              params: { uri },
+              params: { uri, scheduleId, targetDate, attempts },
             })
           }
           style={({ pressed }) => [

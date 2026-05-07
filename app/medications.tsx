@@ -1,59 +1,128 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import { ApiError } from "@/services/api";
+import {
+  describeDaysOfWeek,
+} from "@/services/days-of-week";
+import { listMedicines, Medicine } from "@/services/medicines";
+import { listSchedules, MedicationSchedule } from "@/services/schedules";
+import {
+  getMealTimes,
+  MealSlot,
+  MealTimes,
+  timeToSlot,
+} from "@/services/user-settings";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { ComponentProps, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type TimeOfDay = "morning" | "noon" | "night";
-type IoniconName = ComponentProps<typeof Ionicons>["name"];
+type GroupMode = "prescription" | "slot";
 
-interface Medication {
-  name: string;
-  brand: string;
-  times: TimeOfDay[];
+const GROUP_MODE_KEY = "medications_group_mode";
+
+interface MedicineWithSchedules {
+  medicine: Medicine;
+  schedules: MedicationSchedule[];
 }
 
-interface Hospital {
-  name: string;
-  daysLeft: number;
-  medications: Medication[];
-}
+const SLOT_LABEL: Record<MealSlot, string> = {
+  morning: "아침",
+  noon: "점심",
+  night: "저녁",
+};
 
-const HOSPITALS: Hospital[] = [
-  {
-    name: "서울성심병원",
-    daysLeft: 24,
-    medications: [
-      { name: "혈압약", brand: "에이비씨정 5mg", times: ["morning", "night"] },
-      { name: "당뇨약", brand: "에이비씨정 5mg", times: ["morning", "noon"] },
-    ],
-  },
-  {
-    name: "삼육서울병원",
-    daysLeft: 3,
-    medications: [
-      {
-        name: "고지혈증약",
-        brand: "에이비씨정 5mg",
-        times: ["morning", "night"],
-      },
-    ],
-  },
-];
+const SLOT_ICON: Record<MealSlot, keyof typeof Ionicons.glyphMap> = {
+  morning: "sunny",
+  noon: "restaurant",
+  night: "moon",
+};
 
-const TIME_META: Record<
-  TimeOfDay,
-  { icon: IoniconName; color: string; bg: string }
-> = {
-  morning: { icon: "sunny", color: "#F8B835", bg: "#FFF4D6" },
-  noon: { icon: "restaurant", color: "#5BC4AE", bg: "#D6F1EA" },
-  night: { icon: "moon", color: "#6B6B8A", bg: "#E0E0E8" },
+const SLOT_COLOR: Record<MealSlot, string> = {
+  morning: "#F8B835",
+  noon: "#5BC4AE",
+  night: "#6B6B8A",
+};
+
+const SLOT_BG: Record<MealSlot, string> = {
+  morning: "#FFF4D6",
+  noon: "#D6F1EA",
+  night: "#E0E0E8",
 };
 
 export default function MedicationsScreen() {
   const router = useRouter();
+  const [items, setItems] = useState<MedicineWithSchedules[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [mealTimes, setMealTimesState] = useState<MealTimes | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>("prescription");
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [stored, meals, listResp] = await Promise.all([
+        SecureStore.getItemAsync(GROUP_MODE_KEY),
+        getMealTimes(),
+        listMedicines(),
+      ]);
+      if (stored === "slot" || stored === "prescription") {
+        setGroupMode(stored);
+      }
+      setMealTimesState(meals);
+
+      // 각 medicine별 schedules 병렬 조회
+      const withSchedules = await Promise.all(
+        listResp.responses.map(async (medicine) => {
+          try {
+            const s = await listSchedules(medicine.id);
+            return { medicine, schedules: s.responses };
+          } catch {
+            return { medicine, schedules: [] };
+          }
+        }),
+      );
+      setItems(withSchedules);
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? e.toUserMessage()
+          : "약 목록을 불러오지 못했어요",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadAll();
+    }, [loadAll]),
+  );
+
+  const handleGroupChange = async (mode: GroupMode) => {
+    setGroupMode(mode);
+    await SecureStore.setItemAsync(GROUP_MODE_KEY, mode);
+  };
+
+  const handleAskBot = () => {
+    router.push("/chat" as any);
+  };
+
+  const totalCount = items.length;
+  const lowStockCount = items.filter(
+    (it) => it.medicine.remainingAmount <= 7,
+  ).length;
+
   return (
     <SafeAreaView
       style={styles.safe}
@@ -61,20 +130,87 @@ export default function MedicationsScreen() {
     >
       <PageHeader title="내 약 정보" />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.summaryRow}>
-          <SummaryBox label="현재 복약 중" value="4종" />
-          <SummaryBox label="곧 소진" value="1종" highlight />
+          <SummaryBox label="현재 복약 중" value={`${totalCount}종`} />
+          <SummaryBox
+            label="곧 소진"
+            value={`${lowStockCount}종`}
+            highlight={lowStockCount > 0}
+          />
         </View>
 
-        {HOSPITALS.map((hospital) => (
-          <HospitalSection key={hospital.name} hospital={hospital} />
-        ))}
+        <View style={styles.toggle}>
+          <ToggleBtn
+            label="처방전별"
+            active={groupMode === "prescription"}
+            onPress={() => handleGroupChange("prescription")}
+          />
+          <ToggleBtn
+            label="시간대별"
+            active={groupMode === "slot"}
+            onPress={() => handleGroupChange("slot")}
+          />
+        </View>
+
+        {loading && (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#FFD24D" />
+          </View>
+        )}
+
+        {!loading && error && (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle" size={28} color="#E14B4B" />
+            <AppText type="pretendard-m" style={styles.errorText}>
+              {error}
+            </AppText>
+            <Pressable
+              onPress={() => void loadAll()}
+              style={({ pressed }) => [
+                styles.retryBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <AppText type="pretendard-b" style={styles.retryText}>
+                다시 시도
+              </AppText>
+            </Pressable>
+          </View>
+        )}
+
+        {!loading && !error && items.length === 0 && (
+          <View style={styles.emptyBox}>
+            <MaterialCommunityIcons
+              name="pill"
+              size={36}
+              color="#BBB"
+            />
+            <AppText type="pretendard-m" style={styles.emptyText}>
+              등록된 약이 아직 없어요
+            </AppText>
+            <AppText type="pretendard-r" style={styles.emptySubText}>
+              처방전을 등록하면 자동으로 추가돼요
+            </AppText>
+          </View>
+        )}
+
+        {!loading &&
+          !error &&
+          items.length > 0 &&
+          (groupMode === "prescription" ? (
+            <PrescriptionGroupedList items={items} mealTimes={mealTimes} />
+          ) : (
+            <SlotGroupedList items={items} mealTimes={mealTimes} />
+          ))}
       </ScrollView>
 
       <View style={styles.footer}>
         <Pressable
-          onPress={() => router.push("/chat" as any)}
+          onPress={handleAskBot}
           style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
         >
           <AppText type="pretendard-b" style={styles.ctaText}>
@@ -85,6 +221,237 @@ export default function MedicationsScreen() {
     </SafeAreaView>
   );
 }
+
+/* ──────────────────────── 처방전별 그룹 ──────────────────────── */
+
+function PrescriptionGroupedList({
+  items,
+  mealTimes,
+}: {
+  items: MedicineWithSchedules[];
+  mealTimes: MealTimes | null;
+}) {
+  const groups = new Map<number | "manual", MedicineWithSchedules[]>();
+  for (const it of items) {
+    const key = it.medicine.prescriptionId ?? "manual";
+    const arr = groups.get(key) ?? [];
+    arr.push(it);
+    groups.set(key, arr);
+  }
+
+  return (
+    <View style={{ gap: 16 }}>
+      {Array.from(groups.entries()).map(([key, list]) => (
+        <View key={String(key)} style={styles.groupSection}>
+          <AppText type="pretendard-b" style={styles.groupTitle}>
+            {key === "manual" ? "직접 등록한 약" : `처방전 #${key}`}
+          </AppText>
+          <View style={{ gap: 8 }}>
+            {list.map((it) => (
+              <MedicineCard
+                key={it.medicine.id}
+                item={it}
+                mealTimes={mealTimes}
+              />
+            ))}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/* ──────────────────────── 시간대별 그룹 ──────────────────────── */
+
+function SlotGroupedList({
+  items,
+  mealTimes,
+}: {
+  items: MedicineWithSchedules[];
+  mealTimes: MealTimes | null;
+}) {
+  const slotMap: Record<MealSlot, MedicineWithSchedules[]> = {
+    morning: [],
+    noon: [],
+    night: [],
+  };
+  const unscheduled: MedicineWithSchedules[] = [];
+
+  if (!mealTimes) {
+    return null;
+  }
+
+  for (const it of items) {
+    if (it.schedules.length === 0) {
+      unscheduled.push(it);
+      continue;
+    }
+    const slots = new Set<MealSlot>();
+    for (const s of it.schedules) {
+      slots.add(timeToSlot(s.scheduledTime, mealTimes));
+    }
+    slots.forEach((slot) => slotMap[slot].push(it));
+  }
+
+  const order: MealSlot[] = ["morning", "noon", "night"];
+
+  return (
+    <View style={{ gap: 16 }}>
+      {order.map((slot) => {
+        const list = slotMap[slot];
+        if (list.length === 0) return null;
+        return (
+          <View key={slot} style={styles.groupSection}>
+            <View style={styles.slotHeader}>
+              <View
+                style={[styles.slotIconWrap, { backgroundColor: SLOT_BG[slot] }]}
+              >
+                <Ionicons
+                  name={SLOT_ICON[slot]}
+                  size={18}
+                  color={SLOT_COLOR[slot]}
+                />
+              </View>
+              <AppText type="pretendard-b" style={styles.groupTitle}>
+                {SLOT_LABEL[slot]}
+              </AppText>
+              <AppText type="pretendard-m" style={styles.slotTime}>
+                {mealTimes[slot]}
+              </AppText>
+            </View>
+            <View style={{ gap: 8 }}>
+              {list.map((it) => (
+                <MedicineCard
+                  key={`${slot}-${it.medicine.id}`}
+                  item={it}
+                  mealTimes={mealTimes}
+                />
+              ))}
+            </View>
+          </View>
+        );
+      })}
+      {unscheduled.length > 0 && (
+        <View style={styles.groupSection}>
+          <AppText type="pretendard-b" style={styles.groupTitle}>
+            시간 미정
+          </AppText>
+          <View style={{ gap: 8 }}>
+            {unscheduled.map((it) => (
+              <MedicineCard
+                key={`pending-${it.medicine.id}`}
+                item={it}
+                mealTimes={mealTimes}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ──────────────────────── 약물 카드 ──────────────────────── */
+
+function MedicineCard({
+  item,
+  mealTimes,
+}: {
+  item: MedicineWithSchedules;
+  mealTimes: MealTimes | null;
+}) {
+  const router = useRouter();
+  const { medicine, schedules } = item;
+  const lowStock = medicine.remainingAmount <= 7;
+
+  const slotsActive = new Set<MealSlot>();
+  if (mealTimes) {
+    for (const s of schedules) {
+      slotsActive.add(timeToSlot(s.scheduledTime, mealTimes));
+    }
+  }
+
+  const daysLabel =
+    schedules.length > 0 ? describeDaysOfWeek(schedules[0].daysOfWeek) : null;
+
+  return (
+    <Pressable
+      onPress={() =>
+        router.push({
+          pathname: "/medication-detail" as any,
+          params: { id: String(medicine.id) },
+        })
+      }
+      style={({ pressed }) => [
+        styles.medCard,
+        pressed && { backgroundColor: "#FBF7EC" },
+      ]}
+    >
+      <View style={styles.medThumb}>
+        <MaterialCommunityIcons name="pill" size={28} color="#5BC4AE" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <AppText
+          type="pretendard-b"
+          style={styles.medName}
+          numberOfLines={1}
+        >
+          {medicine.name}
+        </AppText>
+        <View style={styles.medRow}>
+          <AppText
+            type="pretendard-m"
+            style={[styles.medRemaining, lowStock && { color: "#E14B4B" }]}
+          >
+            잔여 {medicine.remainingAmount}일분
+          </AppText>
+          {daysLabel && (
+            <>
+              <View style={styles.dot} />
+              <AppText type="pretendard-m" style={styles.medDays}>
+                {daysLabel}
+              </AppText>
+            </>
+          )}
+        </View>
+        {schedules.length > 0 && (
+          <View style={styles.slotRow}>
+            {(["morning", "noon", "night"] as MealSlot[]).map((slot) => {
+              const on = slotsActive.has(slot);
+              return (
+                <View
+                  key={slot}
+                  style={[
+                    styles.slotPill,
+                    on
+                      ? { backgroundColor: SLOT_BG[slot] }
+                      : styles.slotPillOff,
+                  ]}
+                >
+                  <Ionicons
+                    name={SLOT_ICON[slot]}
+                    size={12}
+                    color={on ? SLOT_COLOR[slot] : "#CCC"}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        )}
+        {schedules.length === 0 && (
+          <View style={styles.pendingPill}>
+            <AppText type="pretendard-b" style={styles.pendingText}>
+              시간 미정
+            </AppText>
+          </View>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#BBB" />
+    </Pressable>
+  );
+}
+
+/* ──────────────────────── 헬퍼 컴포넌트 ──────────────────────── */
 
 function SummaryBox({
   label,
@@ -102,7 +469,7 @@ function SummaryBox({
       </AppText>
       <AppText
         type="extrabold"
-        style={[styles.summaryValue, highlight && { color: "#F88835" }]}
+        style={[styles.summaryValue, highlight && { color: "#E14B4B" }]}
       >
         {value}
       </AppText>
@@ -110,85 +477,41 @@ function SummaryBox({
   );
 }
 
-function HospitalSection({ hospital }: { hospital: Hospital }) {
-  const [open, setOpen] = useState(true);
-  const lowStock = hospital.daysLeft <= 7;
-
+function ToggleBtn({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
   return (
-    <View style={styles.hospitalSection}>
-      <Pressable
-        onPress={() => setOpen((v) => !v)}
-        style={styles.hospitalHeader}
+    <Pressable
+      onPress={onPress}
+      style={[styles.togglePill, active && styles.togglePillOn]}
+    >
+      <AppText
+        type="pretendard-b"
+        style={[styles.toggleText, active && styles.toggleTextOn]}
       >
-        <View style={styles.hospitalLeft}>
-          <Ionicons
-            name={open ? "chevron-up" : "chevron-down"}
-            size={18}
-            color="#444"
-          />
-          <AppText type="pretendard-b" style={styles.hospitalName}>
-            {hospital.name}
-          </AppText>
-        </View>
-        <AppText
-          type="pretendard-b"
-          style={[styles.daysLeft, { color: lowStock ? "#E14B4B" : "#5BC4AE" }]}
-        >
-          {hospital.daysLeft}일분 남음
-        </AppText>
-      </Pressable>
-
-      {open &&
-        hospital.medications.map((med) => (
-          <MedicationCard key={med.name} medication={med} />
-        ))}
-    </View>
-  );
-}
-
-function MedicationCard({ medication }: { medication: Medication }) {
-  return (
-    <View style={styles.medCard}>
-      <View style={styles.medThumb}>
-        <MaterialCommunityIcons name="pill" size={32} color="#F8B835" />
-      </View>
-      <View style={{ flex: 1 }}>
-        <AppText type="pretendard-b" style={styles.medName}>
-          {medication.name}
-        </AppText>
-        <AppText type="pretendard-r" style={styles.medBrand}>
-          {medication.brand}
-        </AppText>
-        <View style={styles.timeRow}>
-          {medication.times.map((t) => (
-            <View
-              key={t}
-              style={[styles.timePill, { backgroundColor: TIME_META[t].bg }]}
-            >
-              <Ionicons
-                name={TIME_META[t].icon}
-                size={14}
-                color={TIME_META[t].color}
-              />
-            </View>
-          ))}
-        </View>
-      </View>
-    </View>
+        {label}
+      </AppText>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#FDFCF3" },
-  scroll: { padding: 16, paddingBottom: 24 },
+  safe: { flex: 1, backgroundColor: "#FFFDF6" },
+  scroll: { padding: 16, paddingBottom: 24, gap: 14 },
 
-  summaryRow: { flexDirection: "row", gap: 10, marginBottom: 18 },
+  summaryRow: { flexDirection: "row", gap: 10 },
   summaryBox: {
     flex: 1,
     backgroundColor: "#FFF",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EDE8D6",
+    borderColor: "#F1ECDB",
     paddingVertical: 14,
     alignItems: "center",
     gap: 4,
@@ -196,52 +519,164 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 13, color: "#666" },
   summaryValue: { fontSize: 22, color: "#171717" },
 
-  hospitalSection: { marginBottom: 18 },
-  hospitalHeader: {
+  toggle: {
+    flexDirection: "row",
+    backgroundColor: "#FFF",
+    borderRadius: 999,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+  },
+  togglePill: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+  togglePillOn: {
+    backgroundColor: "#FFD24D",
+  },
+  toggleText: {
+    fontSize: 13,
+    color: "#888",
+  },
+  toggleTextOn: {
+    color: "#222",
+  },
+
+  loadingBox: {
+    paddingVertical: 60,
+    alignItems: "center",
+  },
+  errorBox: {
+    paddingVertical: 40,
+    alignItems: "center",
+    gap: 10,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  retryBtn: {
+    backgroundColor: "#FFD24D",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  retryText: {
+    fontSize: 14,
+    color: "#222",
+  },
+  emptyBox: {
+    paddingVertical: 60,
+    alignItems: "center",
+    gap: 8,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: "#666",
+  },
+  emptySubText: {
+    fontSize: 13,
+    color: "#999",
+  },
+
+  groupSection: { gap: 8 },
+  groupTitle: {
+    fontSize: 15,
+    color: "#222",
+    paddingHorizontal: 4,
+  },
+  slotHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
+    gap: 8,
+    paddingHorizontal: 4,
   },
-  hospitalLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
-  hospitalName: { fontSize: 15, color: "#171717" },
-  daysLeft: { fontSize: 14 },
+  slotIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  slotTime: {
+    marginLeft: "auto",
+    fontSize: 12,
+    color: "#888",
+  },
 
   medCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFF",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#EDE8D6",
-    padding: 12,
-    marginTop: 8,
     gap: 12,
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
   },
   medThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: "#FBF7EC",
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: "#D6F1EA",
     justifyContent: "center",
     alignItems: "center",
   },
-  medName: { fontSize: 15, color: "#171717" },
-  medBrand: { fontSize: 12, color: "#888", marginTop: 2 },
-  timeRow: { flexDirection: "row", gap: 6, marginTop: 8 },
-  timePill: {
-    paddingHorizontal: 8,
+  medName: {
+    fontSize: 15,
+    color: "#171717",
+  },
+  medRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+  },
+  medRemaining: { fontSize: 12, color: "#666" },
+  medDays: { fontSize: 12, color: "#666" },
+  dot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "#CCC",
+  },
+
+  slotRow: {
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 6,
+  },
+  slotPill: {
+    paddingHorizontal: 6,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 6,
+  },
+  slotPillOff: {
+    backgroundColor: "#F4F2EA",
+  },
+  pendingPill: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FFF4C7",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 6,
+  },
+  pendingText: {
+    fontSize: 11,
+    color: "#7A5C00",
   },
 
   footer: { paddingHorizontal: 20, paddingBottom: 16 },
   cta: {
-    backgroundColor: "#E8E0C0",
+    backgroundColor: "#FFD24D",
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: "center",
   },
   ctaPressed: { opacity: 0.85 },
-  ctaText: { fontSize: 17, color: "#333" },
+  ctaText: { fontSize: 17, color: "#222" },
 });

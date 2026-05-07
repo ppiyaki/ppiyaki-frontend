@@ -1,4 +1,5 @@
 import AppText from "@/components/app-text";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
     Image,
@@ -57,6 +58,21 @@ export default function SelectRoleScreen() {
           />
         </View>
       </View>
+
+      {__DEV__ && (
+        <Pressable
+          onPress={() => router.push("/dev-login" as any)}
+          style={({ pressed }) => [
+            styles.devBtn,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Ionicons name="bug" size={14} color="#888" />
+          <AppText type="pretendard-b" style={styles.devBtnText}>
+            DEV 로그인
+          </AppText>
+        </Pressable>
+      )}
     </SafeAreaView>
   );
 }
@@ -114,5 +130,23 @@ const styles = StyleSheet.create({
     width: "100%",
     height: undefined,
     aspectRatio: 0.5,
+  },
+  devBtn: {
+    position: "absolute",
+    bottom: 24,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E5E0CE",
+  },
+  devBtnText: {
+    fontSize: 12,
+    color: "#888",
   },
 });

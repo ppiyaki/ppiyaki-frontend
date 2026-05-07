@@ -9,9 +9,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function DoseConfirmIssueScreen() {
   const router = useRouter();
   const confirm = useConfirm();
-  const { uri, attempts } = useLocalSearchParams<{
+  const { uri, attempts, scheduleId, targetDate } = useLocalSearchParams<{
     uri?: string;
     attempts?: string;
+    scheduleId?: string;
+    targetDate?: string;
   }>();
 
   const attemptCount = Number(attempts ?? "1");
@@ -20,7 +22,11 @@ export default function DoseConfirmIssueScreen() {
   const handleRetry = () => {
     router.replace({
       pathname: "/dose-confirm/camera" as any,
-      params: { attempts: String(attemptCount + 1) },
+      params: {
+        attempts: String(attemptCount + 1),
+        scheduleId,
+        targetDate,
+      },
     });
   };
 

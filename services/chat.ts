@@ -1,0 +1,192 @@
+import { apiFetch, API_BASE } from "./api";
+import { getAccessToken } from "./token-storage";
+
+export interface ChatSession {
+  sessionId: number;
+}
+
+/** 채팅 세션 생성 */
+export async function createChatSession(): Promise<ChatSession> {
+  return apiFetch<ChatSession>("/api/v1/chat/sessions", {
+    method: "POST",
+  });
+}
+
+/**
+ * SSE 헬퍼 — fetch는 RN에서 SSE를 지원하지 않으므로
+ * EventSource polyfill 또는 react-native-sse 라이브러리가 필요함.
+ *
+ * 우선은 chunk 단위 처리를 위해 ReadableStream 기반 fetch만 정의해두고,
+ * 실제 SSE 처리는 사용 시점에 결정 (라이브러리 추가 또는 ReadableStream 파싱).
+ */
+
+interface SseHandlers {
+  onChunk: (data: string) => void;
+  onError?: (error: Error) => void;
+  onDone?: () => void;
+}
+
+/**
+ * SSE 응답 파싱 — `data: ...` 라인에서 chunk 추출하고 [DONE]에서 종료.
+ * 각 chunk를 onChunk로 전달.
+ *
+ * 백엔드는 OpenAI streaming 형식을 사용한다:
+ *  - "data:" 직후 공백은 SSE 표준 prefix가 아니라 콘텐츠 공백
+ *  - 단어 시작 토큰 = `data: 더` (앞 공백 포함)
+ *  - 단어 중간 토큰 = `data:죄` (공백 없음)
+ *  - 따라서 콜론 다음 콘텐츠를 그대로 전달해야 띄어쓰기가 보존된다.
+ */
+function parseSseChunks(text: string, handlers: SseHandlers): boolean {
+  let done = false;
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("data:")) continue;
+    const data = line.slice(5);
+    const trimmed = data.trim();
+    if (trimmed === "[DONE]") {
+      done = true;
+      break;
+    }
+    if (trimmed === "") continue;
+    handlers.onChunk(data);
+  }
+  return done;
+}
+
+async function streamSse(
+  path: string,
+  init: RequestInit,
+  handlers: SseHandlers,
+): Promise<void> {
+  const token = await getAccessToken();
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined),
+    Accept: "text/event-stream",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  } catch (e) {
+    handlers.onError?.(e instanceof Error ? e : new Error("네트워크 오류"));
+    return;
+  }
+  if (!res.ok) {
+    handlers.onError?.(new Error(`SSE 연결 실패 (${res.status})`));
+    return;
+  }
+
+  // 1) ReadableStream 시도 (RN에서는 보통 미지원)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const reader = (res.body as any)?.getReader?.();
+  if (reader) {
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) >= 0) {
+        const event = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        if (parseSseChunks(event, handlers)) {
+          handlers.onDone?.();
+          return;
+        }
+      }
+    }
+    handlers.onDone?.();
+    return;
+  }
+
+  // 2) 폴백: ReadableStream 미지원 → 전체 텍스트 받은 후 일괄 파싱
+  // 스트리밍 효과는 없지만 응답은 정상 수신
+  try {
+    const text = await res.text();
+    if (__DEV__) {
+      console.log(
+        "[chat] SSE raw text (first 500 chars):",
+        text.slice(0, 500),
+      );
+    }
+    parseSseChunks(text, handlers);
+    handlers.onDone?.();
+  } catch (e) {
+    handlers.onError?.(e instanceof Error ? e : new Error("응답 파싱 실패"));
+  }
+}
+
+/** 단발 텍스트 대화 (세션 없이) — SSE 스트리밍 */
+export function streamQuickTextMessage(
+  message: string,
+  handlers: SseHandlers,
+): Promise<void> {
+  return streamSse(
+    "/api/v1/chat/messages",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    },
+    handlers,
+  );
+}
+
+/** 세션 내 텍스트 메시지 — SSE 스트리밍 */
+export function streamSessionTextMessage(
+  sessionId: number,
+  message: string,
+  handlers: SseHandlers,
+): Promise<void> {
+  return streamSse(
+    `/api/v1/chat/sessions/${sessionId}/messages`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    },
+    handlers,
+  );
+}
+
+/** 단발 음성 대화 (multipart) — SSE 스트리밍 */
+export function streamQuickVoiceMessage(
+  fileUri: string,
+  handlers: SseHandlers,
+  language = "ko",
+): Promise<void> {
+  const form = new FormData();
+  form.append("file", {
+    uri: fileUri,
+    name: "audio.m4a",
+    type: "audio/mp4",
+  } as unknown as Blob);
+  form.append("language", language);
+  return streamSse(
+    "/api/v1/chat/voice-messages",
+    { method: "POST", body: form },
+    handlers,
+  );
+}
+
+/** 세션 내 음성 메시지 (multipart) — SSE 스트리밍 */
+export function streamSessionVoiceMessage(
+  sessionId: number,
+  fileUri: string,
+  handlers: SseHandlers,
+  language = "ko",
+): Promise<void> {
+  const form = new FormData();
+  form.append("file", {
+    uri: fileUri,
+    name: "audio.m4a",
+    type: "audio/mp4",
+  } as unknown as Blob);
+  form.append("language", language);
+  return streamSse(
+    `/api/v1/chat/sessions/${sessionId}/voice-messages`,
+    { method: "POST", body: form },
+    handlers,
+  );
+}

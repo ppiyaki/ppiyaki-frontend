@@ -1,7 +1,12 @@
 import AppText from "@/components/app-text";
+import { ApiError } from "@/services/api";
+import {
+  upsertMedicationLog,
+} from "@/services/medication-logs";
+import { uploadImage } from "@/services/upload";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -14,7 +19,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function DoseConfirmAnalyzingScreen() {
   const router = useRouter();
-  const { uri } = useLocalSearchParams<{ uri?: string }>();
+  const { uri, scheduleId, targetDate, attempts } = useLocalSearchParams<{
+    uri?: string;
+    scheduleId?: string;
+    targetDate?: string;
+    attempts?: string;
+  }>();
+
+  const startedRef = useRef(false);
 
   const bounce = useSharedValue(0);
   const dotProgress = useSharedValue(0);
@@ -28,29 +40,70 @@ export default function DoseConfirmAnalyzingScreen() {
       -1,
       false,
     );
-    dotProgress.value = withRepeat(withTiming(3, { duration: 1200 }), -1, false);
+    dotProgress.value = withRepeat(
+      withTiming(3, { duration: 1200 }),
+      -1,
+      false,
+    );
   }, [bounce, dotProgress]);
 
   useEffect(() => {
-    // 프로토타입: 2.5초 뒤 70% 성공 / 30% 실패
-    const t = setTimeout(() => {
-      const success = Math.random() > 0.3;
-      if (success) {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    void (async () => {
+      const attemptCount = Number(attempts ?? "1");
+      const today = targetDate ?? new Date().toISOString().slice(0, 10);
+
+      try {
+        // 1) presigned 업로드
+        if (!uri) throw new Error("사진이 없어요");
+        const objectKey = await uploadImage("MEDICATION_LOG", uri);
+
+        // 2) upsert (status=TAKEN + photoObjectKey)
+        if (!scheduleId) throw new Error("복약 일정 정보가 없어요");
+        const log = await upsertMedicationLog({
+          scheduleId: Number(scheduleId),
+          targetDate: today,
+          status: "TAKEN",
+          photoObjectKey: objectKey,
+        });
+
+        // 3) aiStatus 분기 (사용자 결정 옵션 1: COUNT_MISMATCH만 issue)
+        if (log.aiStatus === "COUNT_MISMATCH") {
+          router.replace({
+            pathname: "/dose-confirm/issue" as any,
+            params: {
+              uri,
+              attempts: String(attemptCount),
+              scheduleId,
+              targetDate: today,
+            },
+          });
+          return;
+        }
         router.replace("/dose-confirm/success" as any);
-      } else {
+      } catch (e) {
+        console.log("[dose-confirm] upload/upsert failed:", e);
+        const msg =
+          e instanceof ApiError ? e.toUserMessage() : "복약 인증에 실패했어요";
         router.replace({
           pathname: "/dose-confirm/issue" as any,
-          params: { uri, attempts: "1" },
+          params: {
+            uri,
+            attempts: String(attemptCount),
+            scheduleId,
+            targetDate: today,
+            errorMessage: msg,
+          },
         });
       }
-    }, 2500);
-    return () => clearTimeout(t);
-  }, [router, uri]);
+    })();
+  }, [uri, scheduleId, targetDate, attempts, router]);
 
   const charStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: bounce.value }],
   }));
-
   const dot0Style = useAnimatedStyle(() => ({
     opacity: dotProgress.value > 0 ? 1 : 0.25,
   }));

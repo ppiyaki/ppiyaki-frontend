@@ -1,34 +1,92 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import { registerPrescription } from "@/services/prescriptions";
+import { uploadImage } from "@/services/upload";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+type Phase = "idle" | "uploading" | "analyzing";
 
 export default function PrescriptionCameraScreen() {
   const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
-  const [taking, setTaking] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [error, setError] = useState<string | null>(null);
 
   const handleCapture = async () => {
-    if (taking) return;
-    setTaking(true);
+    if (phase !== "idle") return;
+    setError(null);
+
+    // ── 1) 사진 촬영
+    let photoUri: string | undefined;
     try {
-      await cameraRef.current?.takePictureAsync({ quality: 0.7 });
+      const photo = await cameraRef.current?.takePictureAsync({
+        quality: 0.7,
+      });
+      photoUri = photo?.uri;
+      console.log("[prescription] 1) photo:", photoUri);
     } catch (e) {
-      // 프로토타입: 무시
+      console.log("[prescription] 1) takePictureAsync error:", e);
+      setError(`사진 촬영 실패: ${formatError(e)}`);
+      return;
     }
-    // 프로토타입: 50% 확률로 성공/실패 분기
-    const success = Math.random() > 0.3;
-    setTaking(false);
-    if (success) {
-      router.replace("/prescription/result");
-    } else {
-      router.replace("/prescription/failed");
+    if (!photoUri) {
+      setError("사진을 가져오지 못했어요 (uri null)");
+      return;
     }
+
+    // ── 2) Presigned URL + S3 업로드
+    setPhase("uploading");
+    let objectKey: string;
+    try {
+      objectKey = await uploadImage("PRESCRIPTION", photoUri);
+      console.log("[prescription] 2) objectKey:", objectKey);
+    } catch (e) {
+      console.log("[prescription] 2) upload error:", e);
+      setPhase("idle");
+      setError(`업로드 실패: ${formatError(e)}`);
+      return;
+    }
+
+    // ── 3) OCR 등록
+    setPhase("analyzing");
+    try {
+      const detail = await registerPrescription(objectKey);
+      console.log("[prescription] 3) register success:", {
+        id: detail.id,
+        status: detail.status,
+        candidatesCount: detail.candidates.length,
+      });
+      router.replace({
+        pathname: "/prescription/result",
+        params: { id: String(detail.id) },
+      });
+    } catch (e) {
+      console.log("[prescription] 3) register error:", e);
+      setPhase("idle");
+      setError(`OCR 등록 실패: ${formatError(e)}`);
+    }
+  };
+
+  // 에러를 사람이 읽을 수 있는 문자열로 변환
+  const formatError = (e: unknown): string => {
+    if (e instanceof Error) {
+      const anyErr = e as Error & { status?: number; code?: string };
+      const status = anyErr.status ? ` [${anyErr.status}]` : "";
+      const code = anyErr.code ? ` (${anyErr.code})` : "";
+      return `${e.message}${status}${code}`;
+    }
+    return String(e);
   };
 
   if (!permission) {
@@ -56,6 +114,14 @@ export default function PrescriptionCameraScreen() {
     );
   }
 
+  const busy = phase !== "idle";
+  const overlayMessage =
+    phase === "uploading"
+      ? "처방전 사진을 보내고 있어요..."
+      : phase === "analyzing"
+        ? "삐약이가 처방전을 읽고 있어요...\n잠시만 기다려주세요"
+        : null;
+
   return (
     <SafeAreaView
       style={styles.safe}
@@ -70,13 +136,22 @@ export default function PrescriptionCameraScreen() {
           facing="back"
         />
 
+        {error && (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle" size={16} color="#FFF" />
+            <AppText type="pretendard-b" style={styles.errorText}>
+              {error}
+            </AppText>
+          </View>
+        )}
+
         <View style={styles.shutterWrap}>
           <Pressable
             onPress={handleCapture}
-            disabled={taking}
+            disabled={busy}
             style={({ pressed }) => [
               styles.shutter,
-              (pressed || taking) && styles.shutterPressed,
+              (pressed || busy) && styles.shutterPressed,
             ]}
           >
             <Ionicons name="camera" size={22} color="#333" />
@@ -85,6 +160,15 @@ export default function PrescriptionCameraScreen() {
             </AppText>
           </Pressable>
         </View>
+
+        {overlayMessage && (
+          <View style={styles.overlay} pointerEvents="auto">
+            <ActivityIndicator size="large" color="#FFD24D" />
+            <AppText type="pretendard-b" style={styles.overlayText}>
+              {overlayMessage}
+            </AppText>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -130,6 +214,38 @@ const styles = StyleSheet.create({
   shutterText: {
     fontSize: 17,
     color: "#333",
+  },
+  errorBanner: {
+    position: "absolute",
+    top: 16,
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(225,75,75,0.9)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#FFF",
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    gap: 18,
+  },
+  overlayText: {
+    fontSize: 16,
+    color: "#FFF",
+    textAlign: "center",
+    lineHeight: 24,
   },
   permissionBox: {
     flex: 1,

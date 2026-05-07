@@ -1,13 +1,18 @@
 import AppText from "@/components/app-text";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, FlashMode, useCameraPermissions } from "expo-camera";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function DoseConfirmCameraScreen() {
   const router = useRouter();
+  const { scheduleId, targetDate, attempts } = useLocalSearchParams<{
+    scheduleId?: string;
+    targetDate?: string;
+    attempts?: string;
+  }>();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [flash, setFlash] = useState<FlashMode>("off");
@@ -23,7 +28,7 @@ export default function DoseConfirmCameraScreen() {
       if (photo?.uri) {
         router.replace({
           pathname: "/dose-confirm/preview" as any,
-          params: { uri: photo.uri },
+          params: { uri: photo.uri, scheduleId, targetDate, attempts },
         });
       }
     } catch {

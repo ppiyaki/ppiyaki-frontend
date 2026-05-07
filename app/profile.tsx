@@ -60,10 +60,18 @@ export default function ProfileScreen() {
       onPress: () => router.push("/settings/edit-profile" as any),
     },
     {
-      label: "설정",
-      icon: "settings-outline",
+      label: "식사 시간 설정",
+      icon: "time-outline",
+      iconColor: "#F8B835",
+      iconBg: "#FFF4C7",
+      onPress: () => router.push("/settings/meal-times" as any),
+    },
+    {
+      label: "앱 정보",
+      icon: "information-circle-outline",
       iconColor: "#5BC4AE",
       iconBg: "#D6F1EA",
+      onPress: () => router.push("/settings/app-info" as any),
     },
   ];
 

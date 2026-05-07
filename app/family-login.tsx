@@ -1,6 +1,7 @@
 import AppText from "@/components/app-text";
 import KakaoLoginButton from "@/components/kakao-login-button";
 import { loginWithKakao } from "@/services/auth";
+import { resolveAuthRoute, ROUTE_PATHS } from "@/services/post-login";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, View } from "react-native";
@@ -14,11 +15,12 @@ export default function FamilyLoginScreen() {
     setLoading(true);
     try {
       const { isOnboarded } = await loginWithKakao();
-      if (isOnboarded) {
-        router.replace("/family" as any);
-      } else {
-        router.replace("/signup/nickname" as any);
+      if (!isOnboarded) {
+        router.replace(ROUTE_PATHS.onboarding as any);
+        return;
       }
+      const route = await resolveAuthRoute();
+      router.replace(ROUTE_PATHS[route] as any);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "로그인에 실패했습니다.";
       Alert.alert("로그인 실패", msg);

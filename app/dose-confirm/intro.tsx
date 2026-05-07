@@ -1,7 +1,7 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -39,6 +39,10 @@ const TIPS: Tip[] = [
 
 export default function DoseConfirmIntroScreen() {
   const router = useRouter();
+  const { scheduleId, targetDate } = useLocalSearchParams<{
+    scheduleId?: string;
+    targetDate?: string;
+  }>();
 
   return (
     <SafeAreaView
@@ -86,7 +90,12 @@ export default function DoseConfirmIntroScreen() {
 
       <View style={styles.footer}>
         <Pressable
-          onPress={() => router.push("/dose-confirm/camera" as any)}
+          onPress={() =>
+            router.push({
+              pathname: "/dose-confirm/camera" as any,
+              params: { scheduleId, targetDate },
+            })
+          }
           style={({ pressed }) => [
             styles.btn,
             pressed && { opacity: 0.85 },

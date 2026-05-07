@@ -1,14 +1,21 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import {
+  createChatSession,
+  streamSessionTextMessage,
+} from "@/services/chat";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,32 +24,117 @@ type Message =
   | { id: string; role: "user"; text?: string; imageUri?: string; time: string }
   | { id: string; role: "ai"; text: string; time: string };
 
-const INITIAL_MESSAGES: Message[] = [
-  {
-    id: "1",
-    role: "user",
-    text: "이거 약이랑 먹어도 되니",
-    imageUri:
-      "https://images.unsplash.com/photo-1622597467836-f3e6707e1191?w=400",
-    time: "오후 3:02",
-  },
-  {
-    id: "2",
-    role: "ai",
-    text:
-      "아니요! 김복순님이 드시는 혈압약과 함께 드시면 안 돼요.\n" +
-      "음료 속 자몽 성분이 약 효과를 너무 강하게 만들 수 있어요.\n" +
-      "약 드시고 2시간 뒤에 드시는 것이 좋아요.",
-    time: "오후 3:02",
-  },
-];
+function formatTime(d: Date): string {
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const ampm = h < 12 ? "오전" : "오후";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${ampm} ${h12}:${m}`;
+}
+
+// 모듈 레벨 캐시 — 화면 재진입 시에도 대화 유지 (앱 reload/로그아웃까진 유지)
+let cachedMessages: Message[] = [];
+let cachedSessionId: number | null = null;
+
+export function clearChatCache() {
+  cachedMessages = [];
+  cachedSessionId = null;
+}
 
 export default function ChatScreen() {
-  const [messages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>(cachedMessages);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<number | null>(cachedSessionId);
+  const [inputOpen, setInputOpen] = useState(false);
+  const [inputText, setInputText] = useState("");
+  const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+
+  // messages/session 변경 시 캐시 갱신
+  useEffect(() => {
+    cachedMessages = messages;
+  }, [messages]);
+  useEffect(() => {
+    cachedSessionId = sessionId;
+  }, [sessionId]);
+
+  // 세션이 없을 때만 새로 생성
+  useEffect(() => {
+    if (sessionId !== null) return;
+    void (async () => {
+      try {
+        const s = await createChatSession();
+        setSessionId(s.sessionId);
+      } catch (e) {
+        console.log("[chat] session create failed:", e);
+      }
+    })();
+  }, [sessionId]);
+
+  const handleSendText = async () => {
+    const text = inputText.trim();
+    if (!sessionId || !text || streaming) return;
+
+    const now = new Date();
+    const userId = `u-${now.getTime()}`;
+    const aiId = `a-${now.getTime() + 1}`;
+
+    setMessages((prev) => [
+      ...prev,
+      { id: userId, role: "user", text, time: formatTime(now) },
+      { id: aiId, role: "ai", text: "", time: formatTime(now) },
+    ]);
+    setInputText("");
+    setInputOpen(false);
+    setStreaming(true);
+
+    try {
+      await streamSessionTextMessage(sessionId, text, {
+        onChunk: (chunk) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiId && m.role === "ai"
+                ? { ...m, text: m.text + chunk }
+                : m,
+            ),
+          );
+        },
+        onDone: () => {
+          setStreaming(false);
+          // 답변이 비어있으면 placeholder
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiId && m.role === "ai" && !m.text
+                ? {
+                    ...m,
+                    text: "응답을 받지 못했어요. 다시 시도해주세요.",
+                  }
+                : m,
+            ),
+          );
+        },
+        onError: (err) => {
+          console.log("[chat] stream error:", err);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiId && m.role === "ai"
+                ? {
+                    ...m,
+                    text: m.text || "응답을 받지 못했어요. 다시 시도해주세요.",
+                  }
+                : m,
+            ),
+          );
+          setStreaming(false);
+        },
+      });
+    } catch (e) {
+      console.log("[chat] stream throw:", e);
+      setStreaming(false);
+    }
+  };
 
   const openCamera = async () => {
     setPickerOpen(false);
@@ -72,103 +164,156 @@ export default function ChatScreen() {
   return (
     <SafeAreaView
       style={styles.safe}
-      edges={["top", "left", "right", "bottom"]}
+      edges={["top", "left", "right"]}
     >
       <PageHeader title="대화하기" />
 
-      {/* 채팅 영역 */}
-      <ScrollView
-        ref={scrollRef}
-        style={styles.chat}
-        contentContainerStyle={styles.chatContent}
-        onContentSizeChange={() =>
-          scrollRef.current?.scrollToEnd({ animated: true })
-        }
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        enabled={inputOpen}
+        style={{ flex: 1 }}
       >
-        {messages.map((msg) =>
-          msg.role === "user" ? (
-            <UserMessage key={msg.id} message={msg} />
-          ) : (
-            <AiMessage key={msg.id} message={msg} />
-          ),
-        )}
-      </ScrollView>
+        {/* 채팅 영역 */}
+        <ScrollView
+          ref={scrollRef}
+          style={styles.chat}
+          contentContainerStyle={styles.chatContent}
+          onContentSizeChange={() =>
+            scrollRef.current?.scrollToEnd({ animated: true })
+          }
+          keyboardShouldPersistTaps="handled"
+        >
+          {messages.map((msg) =>
+            msg.role === "user" ? (
+              <UserMessage key={msg.id} message={msg} />
+            ) : (
+              <AiMessage key={msg.id} message={msg} />
+            ),
+          )}
+        </ScrollView>
 
-      {/* 사진 미리보기 */}
-      {pendingImage && (
-        <View style={styles.preview}>
-          <Image source={{ uri: pendingImage }} style={styles.previewImg} />
-          <View style={styles.previewBody}>
-            <AppText type="pretendard-b" style={styles.previewTitle}>
-              이 사진에 대해 물어볼 수 있어요
-            </AppText>
-            <AppText type="pretendard-r" style={styles.previewDesc}>
-              마이크를 누르고 질문해보세요
-            </AppText>
+        {/* 사진 미리보기 */}
+        {pendingImage && (
+          <View style={styles.preview}>
+            <Image source={{ uri: pendingImage }} style={styles.previewImg} />
+            <View style={styles.previewBody}>
+              <AppText type="pretendard-b" style={styles.previewTitle}>
+                이 사진에 대해 물어볼 수 있어요
+              </AppText>
+              <AppText type="pretendard-r" style={styles.previewDesc}>
+                마이크를 누르고 질문해보세요
+              </AppText>
+            </View>
+            <Pressable
+              onPress={() => setPendingImage(null)}
+              hitSlop={10}
+              style={styles.previewClose}
+            >
+              <Ionicons name="close" size={18} color="#666" />
+            </Pressable>
           </View>
-          <Pressable
-            onPress={() => setPendingImage(null)}
-            hitSlop={10}
-            style={styles.previewClose}
-          >
-            <Ionicons name="close" size={18} color="#666" />
-          </Pressable>
-        </View>
-      )}
-
-      {/* 하단 입력 패널 */}
-      <View style={styles.dock}>
-        <View style={styles.dockHint}>
-          <View style={styles.wave} />
-          <AppText type="pretendard-m" style={styles.dockHintText}>
-            버튼을 누르고 질문해보세요
-          </AppText>
-          <View style={styles.wave} />
-        </View>
-
-        <View style={styles.dockRow}>
-          <DockBtn
-            label="사진 추가"
-            icon="camera"
-            onPress={() => setPickerOpen(true)}
-          />
-          <Pressable
-            onPress={() => setRecording((r) => !r)}
-            style={({ pressed }) => [
-              styles.micBtn,
-              recording && styles.micBtnOn,
-              pressed && { transform: [{ scale: 0.96 }] },
-            ]}
-          >
-            <Ionicons
-              name={recording ? "stop" : "mic"}
-              size={40}
-              color="#1F1F1F"
-            />
-          </Pressable>
-          <DockBtn label="다시 듣기" icon="volume-high" onPress={() => {}} />
-        </View>
-
-        {recording ? (
-          <AppText type="pretendard-b" style={styles.micLabel}>
-            듣고 있어요…
-          </AppText>
-        ) : (
-          <Pressable
-            style={({ pressed }) => [
-              styles.keypadBtn,
-              pressed && { backgroundColor: "#FFF4C7" },
-            ]}
-            onPress={() => {}}
-          >
-            <Ionicons name="keypad" size={20} color="#1F1F1F" />
-            <AppText type="pretendard-b" style={styles.keypadText}>
-              직접 입력하기
-            </AppText>
-            <Ionicons name="chevron-forward" size={18} color="#888" />
-          </Pressable>
         )}
-      </View>
+
+        {/* 하단 입력 패널 (직접 입력 모드 / 음성 모드) */}
+        <SafeAreaView edges={["bottom"]} style={styles.dockWrap}>
+          {inputOpen ? (
+            <View style={styles.inputBar}>
+              <Pressable
+                onPress={() => {
+                  setInputOpen(false);
+                  setInputText("");
+                }}
+                hitSlop={6}
+                style={styles.inputCloseBtn}
+              >
+                <Ionicons name="close" size={20} color="#666" />
+              </Pressable>
+              <TextInput
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder="궁금한 걸 입력해주세요"
+                placeholderTextColor="#BBB"
+                multiline
+                autoFocus
+                style={styles.inputBarField}
+              />
+              <Pressable
+                onPress={handleSendText}
+                disabled={!sessionId || streaming || !inputText.trim()}
+                style={({ pressed }) => [
+                  styles.inputBarSendBtn,
+                  (!sessionId || streaming || !inputText.trim()) &&
+                    styles.inputBarSendBtnDisabled,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Ionicons
+                  name={streaming ? "hourglass" : "send"}
+                  size={20}
+                  color="#FFF"
+                />
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.dock}>
+              <View style={styles.dockHint}>
+                <View style={styles.wave} />
+                <AppText type="pretendard-m" style={styles.dockHintText}>
+                  버튼을 누르고 질문해보세요
+                </AppText>
+                <View style={styles.wave} />
+              </View>
+
+              <View style={styles.dockRow}>
+                <DockBtn
+                  label="사진 추가"
+                  icon="camera"
+                  onPress={() => setPickerOpen(true)}
+                />
+                <Pressable
+                  onPress={() => setRecording((r) => !r)}
+                  style={({ pressed }) => [
+                    styles.micBtn,
+                    recording && styles.micBtnOn,
+                    pressed && { transform: [{ scale: 0.96 }] },
+                  ]}
+                >
+                  <Ionicons
+                    name={recording ? "stop" : "mic"}
+                    size={40}
+                    color="#1F1F1F"
+                  />
+                </Pressable>
+                <DockBtn
+                  label="다시 듣기"
+                  icon="volume-high"
+                  onPress={() => {}}
+                />
+              </View>
+
+              {recording ? (
+                <AppText type="pretendard-b" style={styles.micLabel}>
+                  듣고 있어요…
+                </AppText>
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.keypadBtn,
+                    pressed && { backgroundColor: "#FFF4C7" },
+                  ]}
+                  onPress={() => setInputOpen(true)}
+                >
+                  <Ionicons name="keypad" size={20} color="#1F1F1F" />
+                  <AppText type="pretendard-b" style={styles.keypadText}>
+                    직접 입력하기
+                  </AppText>
+                  <Ionicons name="chevron-forward" size={18} color="#888" />
+                </Pressable>
+              )}
+            </View>
+          )}
+        </SafeAreaView>
+      </KeyboardAvoidingView>
 
       {/* 사진 선택 바텀시트 */}
       <Modal
@@ -573,6 +718,57 @@ const styles = StyleSheet.create({
   keypadText: {
     fontSize: 15,
     color: "#1F1F1F",
+  },
+
+  /* dock wrapper (SafeArea bottom + 키보드 영역) */
+  dockWrap: {
+    backgroundColor: "#FFFDF6",
+  },
+
+  /* 직접 입력 인라인 바 */
+  inputBar: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: "#FFF",
+    borderTopWidth: 1,
+    borderTopColor: "#F1ECDB",
+  },
+  inputCloseBtn: {
+    width: 40,
+    height: 48,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  inputBarField: {
+    flex: 1,
+    minHeight: 48,
+    maxHeight: 120,
+    backgroundColor: "#FAFAF6",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+    fontSize: 16,
+    fontFamily: "Pretendard-Medium",
+    color: "#222",
+    textAlignVertical: "top",
+  },
+  inputBarSendBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#FFD24D",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  inputBarSendBtnDisabled: {
+    backgroundColor: "#F0EDE0",
   },
 
   /* 바텀시트 */

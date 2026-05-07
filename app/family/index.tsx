@@ -1,7 +1,10 @@
 import AppText from "@/components/app-text";
 import SeniorSummaryHeader from "@/components/senior-summary-header";
+import { listPrescriptions } from "@/services/prescriptions";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Image, ScrollView, StyleSheet, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type DoseStatus = "done" | "upcoming";
@@ -45,7 +48,26 @@ const DOSES: Dose[] = [
 const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 export default function FamilyHomeScreen() {
+  const router = useRouter();
   const completed = DOSES.filter((d) => d.status === "done").length;
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const res = await listPrescriptions("PENDING_REVIEW");
+          if (!cancelled) setPendingCount(res.responses.length);
+        } catch {
+          if (!cancelled) setPendingCount(0);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -60,6 +82,30 @@ export default function FamilyHomeScreen() {
           daysLeft={SENIOR.daysLeft}
           image={SENIOR.image}
         />
+
+        {/* 검토 대기 처방전 카드 */}
+        {pendingCount > 0 && (
+          <Pressable
+            onPress={() => router.push("/family/prescriptions" as any)}
+            style={({ pressed }) => [
+              styles.pendingCard,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={styles.pendingIcon}>
+              <Ionicons name="alert-circle" size={22} color="#F8B835" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText type="pretendard-b" style={styles.pendingTitle}>
+                검토 대기 처방전 {pendingCount}건
+              </AppText>
+              <AppText type="pretendard-m" style={styles.pendingDesc}>
+                어르신이 등록한 처방전을 확인해주세요
+              </AppText>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#F8B835" />
+          </Pressable>
+        )}
 
         {/* 오늘 복약 여정 */}
         <View style={styles.journeyCard}>
@@ -227,6 +273,36 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 24,
     gap: 16,
+  },
+
+  /* 검토 대기 카드 */
+  pendingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFF8E0",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: "#FFE9A8",
+  },
+  pendingIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#FFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pendingTitle: {
+    fontSize: 15,
+    color: "#5A4500",
+    marginBottom: 2,
+  },
+  pendingDesc: {
+    fontSize: 12,
+    color: "#7A5C00",
   },
 
   /* ── 오늘 복약 여정 ── */
