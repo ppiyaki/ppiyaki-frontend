@@ -64,15 +64,41 @@ async function streamSse(
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  if (__DEV__) {
+    console.log("[sse] →", path, "method=", init.method ?? "GET");
+  }
+
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   } catch (e) {
+    if (__DEV__) console.log("[sse] fetch threw:", e);
     handlers.onError?.(e instanceof Error ? e : new Error("네트워크 오류"));
     return;
   }
+  if (__DEV__) {
+    console.log("[sse] ← status", res.status, "ok=", res.ok);
+  }
   if (!res.ok) {
-    handlers.onError?.(new Error(`SSE 연결 실패 (${res.status})`));
+    let bodyText = "";
+    try {
+      bodyText = await res.text();
+    } catch {
+      // 무시
+    }
+    if (__DEV__) {
+      console.log(
+        "[sse] error body (first 500):",
+        bodyText.slice(0, 500),
+      );
+    }
+    handlers.onError?.(
+      new Error(
+        `SSE 연결 실패 (${res.status})${
+          bodyText ? ` — ${bodyText.slice(0, 200)}` : ""
+        }`,
+      ),
+    );
     return;
   }
 
@@ -187,6 +213,65 @@ export function streamSessionVoiceMessage(
   return streamSse(
     `/api/v1/chat/sessions/${sessionId}/voice-messages`,
     { method: "POST", body: form },
+    handlers,
+  );
+}
+
+/* ────────── photo-messages (v0.9.x) ────────── */
+// 약 식별·자유질의 — 이미지는 메모리에서만 처리, S3 저장 없음.
+// vision 모델이 약/비약 자체 판단 후 분기 응답.
+
+interface PhotoPart {
+  uri: string;
+  /** RN가 자동 추론하지 못할 때 명시 — image/jpeg|png|webp */
+  mime?: string;
+  /** 파일명. 미지정 시 photo.jpg */
+  name?: string;
+}
+
+function buildPhotoForm(photo: PhotoPart, message?: string): FormData {
+  const form = new FormData();
+  const ext = (() => {
+    if (photo.mime === "image/png") return "png";
+    if (photo.mime === "image/webp") return "webp";
+    return "jpg";
+  })();
+  const fileName = photo.name ?? `photo.${ext}`;
+  const fileType = photo.mime ?? "image/jpeg";
+  form.append("file", {
+    uri: photo.uri,
+    name: fileName,
+    type: fileType,
+  } as unknown as Blob);
+  if (message && message.trim().length > 0) {
+    form.append("message", message);
+  }
+  return form;
+}
+
+/** 단발 사진 메시지 (임시 세션 자동 생성) — SSE 스트리밍 */
+export function streamQuickPhotoMessage(
+  photo: PhotoPart,
+  handlers: SseHandlers,
+  message?: string,
+): Promise<void> {
+  return streamSse(
+    "/api/v1/chat/photo-messages",
+    { method: "POST", body: buildPhotoForm(photo, message) },
+    handlers,
+  );
+}
+
+/** 세션 내 사진 메시지 — SSE 스트리밍 */
+export function streamSessionPhotoMessage(
+  sessionId: number,
+  photo: PhotoPart,
+  handlers: SseHandlers,
+  message?: string,
+): Promise<void> {
+  return streamSse(
+    `/api/v1/chat/sessions/${sessionId}/photo-messages`,
+    { method: "POST", body: buildPhotoForm(photo, message) },
     handlers,
   );
 }

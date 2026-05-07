@@ -1,10 +1,21 @@
 import AppText from "@/components/app-text";
 import SeniorSummaryHeader from "@/components/senior-summary-header";
+import { getMe } from "@/services/auth";
+import { LinkedSenior, listLinkedSeniors } from "@/services/caregivers";
+import { listMedicines, Medicine } from "@/services/medicines";
 import { listPrescriptions } from "@/services/prescriptions";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  ImageSourcePropType,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type DoseStatus = "done" | "upcoming";
@@ -16,13 +27,19 @@ interface Dose {
   status: DoseStatus;
 }
 
-const SENIOR = {
-  name: "김장군",
-  caregiver: "김철수",
-  daysLeft: 4,
-  streakDays: 6,
-  image: require("../../assets/images/pf/pfimg2.png"),
-};
+const SENIOR_IMAGES: ImageSourcePropType[] = [
+  require("../../assets/images/pf/pfimg2.png"),
+  require("../../assets/images/pf/pfimg3.png"),
+  require("../../assets/images/pf/pfimg4.png"),
+  require("../../assets/images/pf/pfimg5.png"),
+  require("../../assets/images/pf/pfimg6.png"),
+];
+
+function getSeniorImage(id: number): ImageSourcePropType {
+  return SENIOR_IMAGES[id % SENIOR_IMAGES.length];
+}
+
+const FALLBACK_SENIOR_IMAGE = SENIOR_IMAGES[0];
 
 const DOSES: Dose[] = [
   {
@@ -50,24 +67,82 @@ const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 export default function FamilyHomeScreen() {
   const router = useRouter();
   const completed = DOSES.filter((d) => d.status === "done").length;
+
   const [pendingCount, setPendingCount] = useState(0);
+  const [senior, setSenior] = useState<LinkedSenior | null>(null);
+  const [caregiverName, setCaregiverName] = useState("보호자");
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+
+  // 더미 streak (logs 기반 계산은 추후 작업)
+  const streakDays = 6;
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
+
+      // 1) 본인 정보 (보호자 이름)
       (async () => {
         try {
-          const res = await listPrescriptions("PENDING_REVIEW");
-          if (!cancelled) setPendingCount(res.responses.length);
+          const me = await getMe();
+          if (!cancelled) setCaregiverName(me.nickname);
         } catch {
-          if (!cancelled) setPendingCount(0);
+          // 무시
         }
       })();
+
+      // 2) 연결된 시니어 → 약물 + 검토 대기 처방전 (v0.9.2: seniorId 쿼리 필수)
+      (async () => {
+        try {
+          const res = await listLinkedSeniors();
+          const first = res.responses[0] ?? null;
+          if (cancelled) return;
+          setSenior(first);
+          if (first) {
+            try {
+              const meds = await listMedicines(first.id);
+              if (!cancelled) setMedicines(meds.responses);
+            } catch {
+              if (!cancelled) setMedicines([]);
+            }
+            try {
+              const pres = await listPrescriptions("PENDING_REVIEW", first.id);
+              if (!cancelled) setPendingCount(pres.responses.length);
+            } catch {
+              if (!cancelled) setPendingCount(0);
+            }
+          } else {
+            // 시니어 미연동 → 본인 처방전 (시니어 본인 케이스 대비)
+            try {
+              const pres = await listPrescriptions("PENDING_REVIEW");
+              if (!cancelled) setPendingCount(pres.responses.length);
+            } catch {
+              if (!cancelled) setPendingCount(0);
+            }
+          }
+        } catch (e) {
+          console.log("[family-home] listLinkedSeniors failed:", e);
+          if (!cancelled) {
+            setSenior(null);
+            setMedicines([]);
+          }
+        }
+      })();
+
       return () => {
         cancelled = true;
       };
     }, []),
   );
+
+  const seniorName = senior?.nickname ?? "어르신";
+  const seniorImage = senior
+    ? getSeniorImage(senior.id)
+    : FALLBACK_SENIOR_IMAGE;
+  const minRemaining =
+    medicines.length > 0
+      ? Math.min(...medicines.map((m) => m.remainingAmount))
+      : 0;
+  const firstMedicine = medicines[0] ?? null;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -77,10 +152,10 @@ export default function FamilyHomeScreen() {
       >
         {/* 시니어 요약 카드 */}
         <SeniorSummaryHeader
-          name={SENIOR.name}
-          caregiver={SENIOR.caregiver}
-          daysLeft={SENIOR.daysLeft}
-          image={SENIOR.image}
+          name={seniorName}
+          caregiver={caregiverName}
+          daysLeft={minRemaining}
+          image={seniorImage}
         />
 
         {/* 검토 대기 처방전 카드 */}
@@ -110,7 +185,7 @@ export default function FamilyHomeScreen() {
         {/* 오늘 복약 여정 */}
         <View style={styles.journeyCard}>
           <AppText type="pretendard-b" style={styles.journeyTitle}>
-            {SENIOR.name} 님의{"\n"}오늘 복약 여정
+            {seniorName} 님의{"\n"}오늘 복약 여정
           </AppText>
 
           <View style={styles.timeline}>
@@ -152,7 +227,7 @@ export default function FamilyHomeScreen() {
             <AppText type="pretendard-b" style={styles.streakText}>
               현재{" "}
               <AppText type="extrabold" style={{ color: "#5BC4AE" }}>
-                {SENIOR.streakDays}일
+                {streakDays}일
               </AppText>{" "}
               연속 복약 성공!
             </AppText>
@@ -167,7 +242,7 @@ export default function FamilyHomeScreen() {
                 <View
                   style={[
                     styles.weekDot,
-                    idx < SENIOR.streakDays
+                    idx < streakDays
                       ? styles.weekDotOn
                       : styles.weekDotOff,
                   ]}
@@ -195,27 +270,48 @@ export default function FamilyHomeScreen() {
             </AppText>
           </View>
 
-          <View style={styles.medCard}>
-            <View style={styles.medThumb}>
-              <MaterialCommunityIcons name="pill" size={26} color="#F8B835" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <AppText
-                type="pretendard-b"
-                style={styles.medName}
-                numberOfLines={1}
-              >
-                <AppText type="extrabold" style={{ color: "#222" }}>
-                  혈압약
-                </AppText>{" "}
-                (1일 2회) + 금기 사항 등은 아래에 추가...
+          {firstMedicine ? (
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/medication-detail" as any,
+                  params: { id: String(firstMedicine.id) },
+                })
+              }
+              style={({ pressed }) => [
+                styles.medCard,
+                pressed && { backgroundColor: "#FBF7EC" },
+              ]}
+            >
+              <View style={styles.medThumb}>
+                <MaterialCommunityIcons
+                  name="pill"
+                  size={26}
+                  color="#F8B835"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <AppText
+                  type="pretendard-b"
+                  style={styles.medName}
+                  numberOfLines={1}
+                >
+                  {firstMedicine.name}
+                </AppText>
+                <AppText type="pretendard-m" style={styles.medRemaining}>
+                  잔여 {firstMedicine.remainingAmount}일분
+                  {medicines.length > 1 ? ` · 외 ${medicines.length - 1}종` : ""}
+                </AppText>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#BBB" />
+            </Pressable>
+          ) : (
+            <View style={styles.medEmpty}>
+              <AppText type="pretendard-m" style={styles.medEmptyText}>
+                등록된 약이 없어요
               </AppText>
-              <AppText type="pretendard-m" style={styles.medRemaining}>
-                잔여 4일분
-              </AppText>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#BBB" />
-          </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -524,5 +620,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#888",
     marginTop: 2,
+  },
+  medEmpty: {
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+    paddingVertical: 28,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+  },
+  medEmptyText: {
+    fontSize: 13,
+    color: "#888",
   },
 });

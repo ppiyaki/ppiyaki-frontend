@@ -19,7 +19,7 @@ import {
   getMealTimes,
   MealSlot,
   MealTimes,
-  slotToTime,
+  toServerSlot,
 } from "@/services/user-settings";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -101,11 +101,11 @@ export default function MedicationDetailScreen() {
   );
 
   const handleAddSchedule = async () => {
-    if (!medicineId || !newSlot || !meals) return;
+    if (!medicineId || !newSlot) return;
     setAdding(true);
     try {
       await createSchedule(medicineId, {
-        scheduledTime: slotToTime(newSlot, meals),
+        mealSlot: toServerSlot(newSlot),
         dosage: newDosage.trim() || "1정",
       });
       setNewSlot(null);

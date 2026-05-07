@@ -10,12 +10,15 @@ import {
   PrescriptionCandidate,
   PrescriptionDetail,
 } from "@/services/prescriptions";
-import { parseExtractedSchedule } from "@/services/schedule-parser";
-import { createSchedule } from "@/services/schedules";
-import { getMealTimes, slotToTime } from "@/services/user-settings";
+import {
+  fromServerSlot,
+  MealSlot,
+  ServerMealSlot,
+  toServerSlot,
+} from "@/services/user-settings";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -24,6 +27,31 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+const SLOT_ORDER: MealSlot[] = ["morning", "noon", "night"];
+const SLOT_LABEL: Record<MealSlot, string> = {
+  morning: "아침",
+  noon: "점심",
+  night: "저녁",
+};
+const SLOT_ICON: Record<MealSlot, keyof typeof Ionicons.glyphMap> = {
+  morning: "sunny",
+  noon: "restaurant",
+  night: "moon",
+};
+const SLOT_COLOR: Record<MealSlot, string> = {
+  morning: "#F8B835",
+  noon: "#5BC4AE",
+  night: "#6B6B8A",
+};
+const SLOT_BG: Record<MealSlot, string> = {
+  morning: "#FFF4D6",
+  noon: "#D6F1EA",
+  night: "#E0E0E8",
+};
+
+/** v0.9.3: candidate별 보호자가 선택한 confirmedMealSlots 로컬 상태 */
+type SlotMap = Record<number, Set<MealSlot>>;
 
 export default function PrescriptionReviewScreen() {
   const router = useRouter();
@@ -35,6 +63,7 @@ export default function PrescriptionReviewScreen() {
   const [loading, setLoading] = useState(true);
   const [busyCandidateId, setBusyCandidateId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [slotMap, setSlotMap] = useState<SlotMap>({});
 
   const load = useCallback(async () => {
     if (!prescriptionId) return;
@@ -53,12 +82,46 @@ export default function PrescriptionReviewScreen() {
     }, [load]),
   );
 
+  // detail 로드 후 candidate 별 초기 슬롯 = confirmedMealSlots ?? suggestedMealSlots
+  useEffect(() => {
+    if (!detail) return;
+    setSlotMap((prev) => {
+      const next: SlotMap = { ...prev };
+      for (const c of detail.candidates) {
+        if (next[c.id]) continue; // 사용자가 이미 만진 candidate는 보존
+        const seed: ServerMealSlot[] =
+          c.confirmedMealSlots ?? c.suggestedMealSlots ?? [];
+        next[c.id] = new Set(seed.map(fromServerSlot));
+      }
+      return next;
+    });
+  }, [detail]);
+
+  const toggleSlot = (candidateId: number, slot: MealSlot) => {
+    setSlotMap((prev) => {
+      const cur = new Set(prev[candidateId] ?? []);
+      if (cur.has(slot)) cur.delete(slot);
+      else cur.add(slot);
+      return { ...prev, [candidateId]: cur };
+    });
+  };
+
   const showApiError = async (e: unknown) => {
     if (e instanceof ApiError && e.code === "CARE_004") {
       await confirm({
         title: "보호자 검토 대기 중이에요",
         message:
           "처방전이 등록되었어요!\n보호자가 검토해드릴 때까지 잠시만 기다려주세요.",
+        confirmText: "확인",
+        cancelText: "닫기",
+      });
+      return;
+    }
+    if (e instanceof ApiError && e.code === "USER_002") {
+      await confirm({
+        title: "식사 시간이 필요해요",
+        message:
+          "선택한 식사 시간(아침/점심/저녁)이 어르신 프로필에 설정되어 있지 않아요.\n프로필에서 식사 시간을 먼저 설정해주세요.",
         confirmText: "확인",
         cancelText: "닫기",
       });
@@ -86,12 +149,15 @@ export default function PrescriptionReviewScreen() {
     if (!prescriptionId) return;
     setBusyCandidateId(candidateId);
     try {
-      await decideCandidate(
-        prescriptionId,
-        candidateId,
-        decision,
+      // ACCEPTED/MANUALLY_CORRECTED일 때만 confirmedMealSlots 함께 전송
+      const confirmedMealSlots =
+        decision === "REJECTED"
+          ? undefined
+          : Array.from(slotMap[candidateId] ?? []).map(toServerSlot);
+      await decideCandidate(prescriptionId, candidateId, decision, {
         chosenItemSeq,
-      );
+        confirmedMealSlots,
+      });
       await load();
     } catch (e) {
       await showApiError(e);
@@ -131,7 +197,8 @@ export default function PrescriptionReviewScreen() {
     if (!allDecided) {
       await confirm({
         title: "검토가 필요해요",
-        message: "아직 결정하지 않은 약이 있어요.\n모두 확인 후 다시 시도해주세요.",
+        message:
+          "아직 결정하지 않은 약이 있어요.\n모두 확인 후 다시 시도해주세요.",
         confirmText: "확인",
         cancelText: "닫기",
       });
@@ -140,27 +207,29 @@ export default function PrescriptionReviewScreen() {
 
     setSubmitting(true);
     try {
+      // v0.9.3: 서버가 confirmedMealSlots 기반으로 schedule 자동 생성
       const result = await confirmPrescription(prescriptionId);
-      const summary = await autoCreateSchedules(result.candidates);
+      const accepted = result.candidates.filter(
+        (c) =>
+          c.caregiverDecision !== "REJECTED" && c.createdMedicineId !== null,
+      );
+      const scheduled = accepted.filter(
+        (c) => (c.confirmedMealSlots?.length ?? 0) > 0,
+      ).length;
+      const pending = accepted.length - scheduled;
 
-      const messageLines: string[] = [];
-      if (summary.scheduledMedicines > 0) {
-        messageLines.push(
-          `${summary.scheduledMedicines}개 약의 복약 시간이 자동으로 설정됐어요.`,
-        );
+      const lines: string[] = [];
+      if (scheduled > 0) {
+        lines.push(`${scheduled}개 약의 복약 시간이 자동으로 설정됐어요.`);
       }
-      if (summary.pendingMedicines > 0) {
-        messageLines.push(
-          `${summary.pendingMedicines}개 약은 시간을 직접 설정해주세요.`,
-        );
+      if (pending > 0) {
+        lines.push(`${pending}개 약은 시간을 직접 설정해주세요.`);
       }
-      if (messageLines.length === 0) {
-        messageLines.push("처방전 확정이 완료됐어요.");
-      }
+      if (lines.length === 0) lines.push("처방전 확정이 완료됐어요.");
 
       await confirm({
         title: "확정 완료",
-        message: messageLines.join("\n"),
+        message: lines.join("\n"),
         confirmText: "확인",
         cancelText: "닫기",
       });
@@ -225,6 +294,8 @@ export default function PrescriptionReviewScreen() {
             key={c.id}
             candidate={c}
             busy={busyCandidateId === c.id}
+            selectedSlots={slotMap[c.id] ?? new Set()}
+            onToggleSlot={(slot) => toggleSlot(c.id, slot)}
             onAccept={() => handleDecide(c.id, "ACCEPTED")}
             onReject={() => handleDecide(c.id, "REJECTED")}
             onCorrect={() => handleManualCorrect(c.id)}
@@ -264,65 +335,19 @@ export default function PrescriptionReviewScreen() {
   );
 }
 
-interface AutoScheduleSummary {
-  scheduledMedicines: number;
-  pendingMedicines: number;
-}
-
-/**
- * confirm 후 candidates 보고 schedule 자동 등록.
- * - createdMedicineId가 있는 약(=ACCEPTED/MANUALLY_CORRECTED)만 처리
- * - extractedSchedule 파싱해서 슬롯 추출 → 사용자 식사 시간으로 변환
- * - 슬롯이 비면 "시간 미정" 카운트만 +1, 등록 X
- */
-async function autoCreateSchedules(
-  candidates: PrescriptionCandidate[],
-): Promise<AutoScheduleSummary> {
-  const meals = await getMealTimes();
-  let scheduledMedicines = 0;
-  let pendingMedicines = 0;
-
-  for (const c of candidates) {
-    if (!c.createdMedicineId) continue;
-
-    const slots = parseExtractedSchedule(c.extractedSchedule);
-    if (slots.length === 0) {
-      pendingMedicines++;
-      continue;
-    }
-
-    const dosage = c.extractedDosage?.trim() || "1정";
-    let anySuccess = false;
-    for (const slot of slots) {
-      try {
-        await createSchedule(c.createdMedicineId, {
-          scheduledTime: slotToTime(slot, meals),
-          dosage,
-        });
-        anySuccess = true;
-      } catch (e) {
-        console.log(
-          `[auto-schedule] medicine=${c.createdMedicineId} slot=${slot} failed:`,
-          e,
-        );
-      }
-    }
-    if (anySuccess) scheduledMedicines++;
-    else pendingMedicines++;
-  }
-
-  return { scheduledMedicines, pendingMedicines };
-}
-
 function CandidateCard({
   candidate,
   busy,
+  selectedSlots,
+  onToggleSlot,
   onAccept,
   onReject,
   onCorrect,
 }: {
   candidate: PrescriptionCandidate;
   busy: boolean;
+  selectedSlots: Set<MealSlot>;
+  onToggleSlot: (slot: MealSlot) => void;
   onAccept: () => void;
   onReject: () => void;
   onCorrect: () => void;
@@ -330,6 +355,7 @@ function CandidateCard({
   const decided = candidate.caregiverDecision;
   const display =
     candidate.matchedItemName ?? candidate.extractedName ?? "이름 미확인";
+  const showSlotPicker = decided === "PENDING" || decided !== "REJECTED";
 
   return (
     <View
@@ -367,6 +393,60 @@ function CandidateCard({
           )}
         </View>
       </View>
+
+      {showSlotPicker && decided !== "REJECTED" && (
+        <View style={styles.slotPickerBox}>
+          <AppText type="pretendard-b" style={styles.slotPickerTitle}>
+            복용 시간대 선택
+            {(candidate.suggestedMealSlots?.length ?? 0) > 0 && (
+              <AppText type="pretendard-r" style={styles.slotPickerHint}>
+                {"  "}AI 추천 표시됨
+              </AppText>
+            )}
+          </AppText>
+          <View style={styles.slotRow}>
+            {SLOT_ORDER.map((slot) => {
+              const on = selectedSlots.has(slot);
+              const suggested =
+                candidate.suggestedMealSlots?.includes(toServerSlot(slot)) ??
+                false;
+              return (
+                <Pressable
+                  key={slot}
+                  onPress={() => onToggleSlot(slot)}
+                  disabled={decided !== "PENDING"}
+                  style={[
+                    styles.slotBtn,
+                    on && {
+                      borderColor: SLOT_COLOR[slot],
+                      backgroundColor: SLOT_BG[slot],
+                    },
+                    decided !== "PENDING" && { opacity: 0.7 },
+                  ]}
+                >
+                  <Ionicons
+                    name={SLOT_ICON[slot]}
+                    size={16}
+                    color={on ? SLOT_COLOR[slot] : "#BBB"}
+                  />
+                  <AppText
+                    type="pretendard-b"
+                    style={[
+                      styles.slotBtnText,
+                      on && { color: SLOT_COLOR[slot] },
+                    ]}
+                  >
+                    {SLOT_LABEL[slot]}
+                  </AppText>
+                  {suggested && !on && (
+                    <View style={styles.suggestDot} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
 
       {decided === "PENDING" ? (
         <View style={styles.actionRow}>
@@ -440,7 +520,10 @@ function DecisionBadge({ decision }: { decision: CaregiverDecision }) {
   })();
   return (
     <View style={[styles.badge, { backgroundColor: meta.bg }]}>
-      <AppText type="pretendard-b" style={[styles.badgeText, { color: meta.color }]}>
+      <AppText
+        type="pretendard-b"
+        style={[styles.badgeText, { color: meta.color }]}
+      >
         {meta.label}
       </AppText>
     </View>
@@ -537,6 +620,46 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#999",
     marginTop: 2,
+  },
+
+  /* 슬롯 선택 */
+  slotPickerBox: {
+    gap: 8,
+  },
+  slotPickerTitle: {
+    fontSize: 12,
+    color: "#444",
+  },
+  slotPickerHint: {
+    fontSize: 11,
+    color: "#888",
+  },
+  slotRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  slotBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#F1ECDB",
+    backgroundColor: "#FAFAF6",
+  },
+  slotBtnText: {
+    fontSize: 12,
+    color: "#888",
+  },
+  suggestDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#FFD24D",
+    marginLeft: 2,
   },
 
   actionRow: {

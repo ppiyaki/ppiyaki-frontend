@@ -80,7 +80,7 @@ export default function PrescriptionSearchScreen() {
           pId,
           Number(candidateId),
           "MANUALLY_CORRECTED",
-          med.itemSeq,
+          { chosenItemSeq: med.itemSeq },
         );
       } else {
         await addManualCandidate(pId, {

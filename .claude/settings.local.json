@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:www.notion.so)"
+      "WebFetch(domain:www.notion.so)",
+      "Bash(rm \"c:\\\\Users\\\\cjy03\\\\Ppiyaki\\\\services\\\\schedule-parser.ts\")",
+      "Bash(npx expo *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\cjy03\\Ppiyaki\\services"
     ]
   }
 }

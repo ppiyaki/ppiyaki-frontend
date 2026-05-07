@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import type { ServerMealSlot } from "./user-settings";
 
 export type PrescriptionStatus =
   | "PROCESSING"
@@ -28,6 +29,10 @@ export interface PrescriptionCandidate {
   caregiverDecision: CaregiverDecision;
   caregiverChosenItemSeq?: string | null;
   createdMedicineId?: number | null;
+  /** v0.9.3: OCR 시점 LLM이 제안한 슬롯 */
+  suggestedMealSlots?: ServerMealSlot[];
+  /** v0.9.3: 보호자가 PATCH로 확정한 슬롯 */
+  confirmedMealSlots?: ServerMealSlot[] | null;
 }
 
 export interface PrescriptionDetail {
@@ -58,12 +63,16 @@ export async function registerPrescription(
   });
 }
 
-/** 처방전 목록 조회 (status로 필터 가능) */
+/**
+ * 처방전 목록 조회 (status로 필터 가능).
+ * v0.9.2: 보호자가 시니어 처방전 조회하려면 seniorId 쿼리 필수.
+ */
 export async function listPrescriptions(
   status?: PrescriptionStatus,
+  seniorId?: number,
 ): Promise<{ responses: PrescriptionSummary[] }> {
   return apiFetch("/api/v1/prescriptions", {
-    query: { status },
+    query: { status, seniorId },
   });
 }
 
@@ -76,12 +85,18 @@ export async function getPrescription(
   );
 }
 
-/** 처방전 후보 결정 (ACCEPTED / REJECTED / MANUALLY_CORRECTED) */
+/**
+ * 처방전 후보 결정 (ACCEPTED / REJECTED / MANUALLY_CORRECTED).
+ * v0.9.3: confirmedMealSlots 추가 — confirm 시 슬롯별 schedule 자동 생성.
+ */
 export async function decideCandidate(
   prescriptionId: number,
   candidateId: number,
   decision: Exclude<CaregiverDecision, "PENDING">,
-  chosenItemSeq?: string,
+  options?: {
+    chosenItemSeq?: string;
+    confirmedMealSlots?: ServerMealSlot[];
+  },
 ): Promise<void> {
   await apiFetch<void>(
     `/api/v1/prescriptions/${prescriptionId}/medicines/${candidateId}`,
@@ -90,7 +105,10 @@ export async function decideCandidate(
       json: {
         decision,
         chosenItemSeq:
-          decision === "MANUALLY_CORRECTED" ? chosenItemSeq : undefined,
+          decision === "MANUALLY_CORRECTED"
+            ? options?.chosenItemSeq
+            : undefined,
+        confirmedMealSlots: options?.confirmedMealSlots,
       },
     },
   );

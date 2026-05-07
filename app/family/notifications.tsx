@@ -1,5 +1,6 @@
 import AppText from "@/components/app-text";
 import { ApiError } from "@/services/api";
+import { listLinkedSeniors } from "@/services/caregivers";
 import { listMedicationLogs } from "@/services/medication-logs";
 import { listPrescriptions } from "@/services/prescriptions";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -51,9 +52,18 @@ export default function FamilyNotificationsScreen() {
     try {
       const items: NotifItem[] = [];
 
-      // 1) 처방전 검토 대기 → warning
+      // 1) 연결된 시니어 ID — listPrescriptions / listMedicationLogs 모두 v0.9.2 이후 seniorId 필수
+      let seniorId: number | undefined;
       try {
-        const pres = await listPrescriptions("PENDING_REVIEW");
+        const seniorsRes = await listLinkedSeniors();
+        seniorId = seniorsRes.responses[0]?.id;
+      } catch (e) {
+        console.log("[notif] listLinkedSeniors failed:", e);
+      }
+
+      // 2) 처방전 검토 대기 → warning
+      try {
+        const pres = await listPrescriptions("PENDING_REVIEW", seniorId);
         for (const p of pres.responses) {
           items.push({
             id: `pres-${p.id}`,
@@ -68,7 +78,7 @@ export default function FamilyNotificationsScreen() {
         console.log("[notif] prescriptions failed:", e);
       }
 
-      // 2) 최근 7일 복약 기록 → 누락은 delay, 완료는 celebrate
+      // 3) 최근 7일 복약 기록 → 누락은 delay, 완료는 celebrate
       try {
         const today = new Date();
         const weekAgo = new Date(today);
@@ -76,6 +86,7 @@ export default function FamilyNotificationsScreen() {
         const logs = await listMedicationLogs({
           from: toIsoDate(weekAgo),
           to: toIsoDate(today),
+          seniorId,
         });
 
         for (const log of logs.responses) {

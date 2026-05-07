@@ -3,6 +3,27 @@ import { apiFetch } from "./api";
 import type { ServerMealTimes } from "./auth";
 
 export type MealSlot = "morning" | "noon" | "night";
+export type ServerMealSlot = "BREAKFAST" | "LUNCH" | "DINNER";
+
+const CLIENT_TO_SERVER: Record<MealSlot, ServerMealSlot> = {
+  morning: "BREAKFAST",
+  noon: "LUNCH",
+  night: "DINNER",
+};
+
+const SERVER_TO_CLIENT: Record<ServerMealSlot, MealSlot> = {
+  BREAKFAST: "morning",
+  LUNCH: "noon",
+  DINNER: "night",
+};
+
+export function toServerSlot(s: MealSlot): ServerMealSlot {
+  return CLIENT_TO_SERVER[s];
+}
+
+export function fromServerSlot(s: ServerMealSlot): MealSlot {
+  return SERVER_TO_CLIENT[s];
+}
 
 export interface MealTimes {
   morning: string; // "HH:mm"

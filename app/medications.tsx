@@ -7,10 +7,10 @@ import {
 import { listMedicines, Medicine } from "@/services/medicines";
 import { listSchedules, MedicationSchedule } from "@/services/schedules";
 import {
+  fromServerSlot,
   getMealTimes,
   MealSlot,
   MealTimes,
-  timeToSlot,
 } from "@/services/user-settings";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -202,7 +202,7 @@ export default function MedicationsScreen() {
           !error &&
           items.length > 0 &&
           (groupMode === "prescription" ? (
-            <PrescriptionGroupedList items={items} mealTimes={mealTimes} />
+            <PrescriptionGroupedList items={items} />
           ) : (
             <SlotGroupedList items={items} mealTimes={mealTimes} />
           ))}
@@ -226,10 +226,8 @@ export default function MedicationsScreen() {
 
 function PrescriptionGroupedList({
   items,
-  mealTimes,
 }: {
   items: MedicineWithSchedules[];
-  mealTimes: MealTimes | null;
 }) {
   const groups = new Map<number | "manual", MedicineWithSchedules[]>();
   for (const it of items) {
@@ -251,7 +249,6 @@ function PrescriptionGroupedList({
               <MedicineCard
                 key={it.medicine.id}
                 item={it}
-                mealTimes={mealTimes}
               />
             ))}
           </View>
@@ -288,7 +285,7 @@ function SlotGroupedList({
     }
     const slots = new Set<MealSlot>();
     for (const s of it.schedules) {
-      slots.add(timeToSlot(s.scheduledTime, mealTimes));
+      slots.add(fromServerSlot(s.mealSlot));
     }
     slots.forEach((slot) => slotMap[slot].push(it));
   }
@@ -324,7 +321,6 @@ function SlotGroupedList({
                 <MedicineCard
                   key={`${slot}-${it.medicine.id}`}
                   item={it}
-                  mealTimes={mealTimes}
                 />
               ))}
             </View>
@@ -341,7 +337,6 @@ function SlotGroupedList({
               <MedicineCard
                 key={`pending-${it.medicine.id}`}
                 item={it}
-                mealTimes={mealTimes}
               />
             ))}
           </View>
@@ -355,20 +350,16 @@ function SlotGroupedList({
 
 function MedicineCard({
   item,
-  mealTimes,
 }: {
   item: MedicineWithSchedules;
-  mealTimes: MealTimes | null;
 }) {
   const router = useRouter();
   const { medicine, schedules } = item;
   const lowStock = medicine.remainingAmount <= 7;
 
   const slotsActive = new Set<MealSlot>();
-  if (mealTimes) {
-    for (const s of schedules) {
-      slotsActive.add(timeToSlot(s.scheduledTime, mealTimes));
-    }
+  for (const s of schedules) {
+    slotsActive.add(fromServerSlot(s.mealSlot));
   }
 
   const daysLabel =

@@ -2,10 +2,20 @@ import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import {
   createChatSession,
+  streamSessionPhotoMessage,
   streamSessionTextMessage,
+  streamSessionVoiceMessage,
 } from "@/services/chat";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  AudioModule,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from "expo-audio";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import * as Speech from "expo-speech";
 import { useEffect, useRef, useState } from "react";
 import {
   Image,
@@ -50,7 +60,36 @@ export default function ChatScreen() {
   const [inputOpen, setInputOpen] = useState(false);
   const [inputText, setInputText] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  // expo-audio 녹음 훅 — m4a 형식이 chat.ts streamSessionVoiceMessage 기대값과 일치
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+
+  // 마운트 시 마이크 권한 + 오디오 모드 준비
+  useEffect(() => {
+    void (async () => {
+      try {
+        const perm = await AudioModule.requestRecordingPermissionsAsync();
+        if (!perm.granted) {
+          console.log("[chat] mic permission denied");
+        }
+        await setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
+        });
+      } catch (e) {
+        console.log("[chat] audio init failed:", e);
+      }
+    })();
+  }, []);
+
+  // 화면 벗어날 때 TTS 정지
+  useEffect(() => {
+    return () => {
+      void Speech.stop();
+    };
+  }, []);
 
   // messages/session 변경 시 캐시 갱신
   useEffect(() => {
@@ -73,9 +112,77 @@ export default function ChatScreen() {
     })();
   }, [sessionId]);
 
-  const handleSendText = async () => {
+  const buildAiHandlers = (aiId: string) => ({
+    onChunk: (chunk: string) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiId && m.role === "ai"
+            ? { ...m, text: m.text + chunk }
+            : m,
+        ),
+      );
+    },
+    onDone: () => {
+      setStreaming(false);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiId && m.role === "ai" && !m.text
+            ? { ...m, text: "응답을 받지 못했어요. 다시 시도해주세요." }
+            : m,
+        ),
+      );
+    },
+    onError: (err: Error) => {
+      console.log("[chat] stream error:", err);
+      const fallback =
+        err.message && err.message.length > 0
+          ? `응답을 받지 못했어요\n(${err.message})`
+          : "응답을 받지 못했어요. 다시 시도해주세요.";
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiId && m.role === "ai"
+            ? { ...m, text: m.text || fallback }
+            : m,
+        ),
+      );
+      setStreaming(false);
+    },
+  });
+
+  const inferPhotoMime = (uri: string): string => {
+    const lower = uri.toLowerCase();
+    if (lower.endsWith(".png")) return "image/png";
+    if (lower.endsWith(".webp")) return "image/webp";
+    return "image/jpeg";
+  };
+
+  /**
+   * nginx client_max_body_size(기본 1MB) 우회용 리사이즈.
+   * 가로 1280px로 리사이즈 + JPEG 70% — 보통 200~500KB로 떨어진다.
+   */
+  const compressPhoto = async (
+    uri: string,
+  ): Promise<{ uri: string; mime: string }> => {
+    try {
+      const ctx = ImageManipulator.ImageManipulator.manipulate(uri);
+      ctx.resize({ width: 1280 });
+      const ref = await ctx.renderAsync();
+      const image = await ref.saveAsync({
+        format: ImageManipulator.SaveFormat.JPEG,
+        compress: 0.7,
+      });
+      return { uri: image.uri, mime: "image/jpeg" };
+    } catch (e) {
+      console.log("[chat] image compress failed, sending original:", e);
+      return { uri, mime: inferPhotoMime(uri) };
+    }
+  };
+
+  const handleSend = async () => {
+    if (!sessionId || streaming) return;
     const text = inputText.trim();
-    if (!sessionId || !text || streaming) return;
+    const photoUri = pendingImage;
+    if (!text && !photoUri) return;
 
     const now = new Date();
     const userId = `u-${now.getTime()}`;
@@ -83,57 +190,115 @@ export default function ChatScreen() {
 
     setMessages((prev) => [
       ...prev,
-      { id: userId, role: "user", text, time: formatTime(now) },
+      {
+        id: userId,
+        role: "user",
+        text: text || undefined,
+        imageUri: photoUri ?? undefined,
+        time: formatTime(now),
+      },
       { id: aiId, role: "ai", text: "", time: formatTime(now) },
     ]);
     setInputText("");
     setInputOpen(false);
+    setPendingImage(null);
     setStreaming(true);
 
+    const handlers = buildAiHandlers(aiId);
+
     try {
-      await streamSessionTextMessage(sessionId, text, {
-        onChunk: (chunk) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiId && m.role === "ai"
-                ? { ...m, text: m.text + chunk }
-                : m,
-            ),
-          );
-        },
-        onDone: () => {
-          setStreaming(false);
-          // 답변이 비어있으면 placeholder
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiId && m.role === "ai" && !m.text
-                ? {
-                    ...m,
-                    text: "응답을 받지 못했어요. 다시 시도해주세요.",
-                  }
-                : m,
-            ),
-          );
-        },
-        onError: (err) => {
-          console.log("[chat] stream error:", err);
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiId && m.role === "ai"
-                ? {
-                    ...m,
-                    text: m.text || "응답을 받지 못했어요. 다시 시도해주세요.",
-                  }
-                : m,
-            ),
-          );
-          setStreaming(false);
-        },
-      });
+      if (photoUri) {
+        const compressed = await compressPhoto(photoUri);
+        await streamSessionPhotoMessage(
+          sessionId,
+          compressed,
+          handlers,
+          text || undefined,
+        );
+      } else {
+        await streamSessionTextMessage(sessionId, text, handlers);
+      }
     } catch (e) {
       console.log("[chat] stream throw:", e);
       setStreaming(false);
     }
+  };
+
+  const startRecording = async () => {
+    if (!sessionId || streaming || recording) return;
+    try {
+      void Speech.stop();
+      setSpeakingId(null);
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setRecording(true);
+    } catch (e) {
+      console.log("[chat] start recording failed:", e);
+      setRecording(false);
+    }
+  };
+
+  const stopRecordingAndSend = async () => {
+    if (!recording || !sessionId) {
+      setRecording(false);
+      return;
+    }
+    setRecording(false);
+    try {
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
+      if (!uri) return;
+
+      const now = new Date();
+      const userId = `u-${now.getTime()}`;
+      const aiId = `a-${now.getTime() + 1}`;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: userId,
+          role: "user",
+          text: "🎤 음성 메시지",
+          time: formatTime(now),
+        },
+        { id: aiId, role: "ai", text: "", time: formatTime(now) },
+      ]);
+      setStreaming(true);
+
+      const handlers = buildAiHandlers(aiId);
+      try {
+        await streamSessionVoiceMessage(sessionId, uri, handlers);
+      } catch (e) {
+        console.log("[chat] voice stream throw:", e);
+        setStreaming(false);
+      }
+    } catch (e) {
+      console.log("[chat] stop recording failed:", e);
+      setStreaming(false);
+    }
+  };
+
+  const handleMicPress = () => {
+    if (recording) void stopRecordingAndSend();
+    else void startRecording();
+  };
+
+  const handleSpeakAi = (msgId: string, text: string) => {
+    if (!text) return;
+    if (speakingId === msgId) {
+      void Speech.stop();
+      setSpeakingId(null);
+      return;
+    }
+    void Speech.stop();
+    setSpeakingId(msgId);
+    Speech.speak(text, {
+      language: "ko-KR",
+      rate: 0.95,
+      onDone: () => setSpeakingId((cur) => (cur === msgId ? null : cur)),
+      onStopped: () => setSpeakingId((cur) => (cur === msgId ? null : cur)),
+      onError: () => setSpeakingId((cur) => (cur === msgId ? null : cur)),
+    });
   };
 
   const openCamera = async () => {
@@ -187,7 +352,12 @@ export default function ChatScreen() {
             msg.role === "user" ? (
               <UserMessage key={msg.id} message={msg} />
             ) : (
-              <AiMessage key={msg.id} message={msg} />
+              <AiMessage
+                key={msg.id}
+                message={msg}
+                speaking={speakingId === msg.id}
+                onSpeak={() => handleSpeakAi(msg.id, msg.text)}
+              />
             ),
           )}
         </ScrollView>
@@ -201,9 +371,20 @@ export default function ChatScreen() {
                 이 사진에 대해 물어볼 수 있어요
               </AppText>
               <AppText type="pretendard-r" style={styles.previewDesc}>
-                마이크를 누르고 질문해보세요
+                바로 보내거나 질문을 입력해보세요
               </AppText>
             </View>
+            <Pressable
+              onPress={handleSend}
+              disabled={!sessionId || streaming}
+              style={({ pressed }) => [
+                styles.previewSend,
+                (!sessionId || streaming) && styles.previewSendDisabled,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Ionicons name="send" size={16} color="#FFF" />
+            </Pressable>
             <Pressable
               onPress={() => setPendingImage(null)}
               hitSlop={10}
@@ -238,11 +419,17 @@ export default function ChatScreen() {
                 style={styles.inputBarField}
               />
               <Pressable
-                onPress={handleSendText}
-                disabled={!sessionId || streaming || !inputText.trim()}
+                onPress={handleSend}
+                disabled={
+                  !sessionId ||
+                  streaming ||
+                  (!inputText.trim() && !pendingImage)
+                }
                 style={({ pressed }) => [
                   styles.inputBarSendBtn,
-                  (!sessionId || streaming || !inputText.trim()) &&
+                  (!sessionId ||
+                    streaming ||
+                    (!inputText.trim() && !pendingImage)) &&
                     styles.inputBarSendBtnDisabled,
                   pressed && { opacity: 0.85 },
                 ]}
@@ -271,10 +458,12 @@ export default function ChatScreen() {
                   onPress={() => setPickerOpen(true)}
                 />
                 <Pressable
-                  onPress={() => setRecording((r) => !r)}
+                  onPress={handleMicPress}
+                  disabled={!sessionId || streaming}
                   style={({ pressed }) => [
                     styles.micBtn,
                     recording && styles.micBtnOn,
+                    (!sessionId || streaming) && { opacity: 0.5 },
                     pressed && { transform: [{ scale: 0.96 }] },
                   ]}
                 >
@@ -287,7 +476,14 @@ export default function ChatScreen() {
                 <DockBtn
                   label="다시 듣기"
                   icon="volume-high"
-                  onPress={() => {}}
+                  onPress={() => {
+                    const lastAi = [...messages]
+                      .reverse()
+                      .find((m) => m.role === "ai" && m.text);
+                    if (lastAi && lastAi.role === "ai") {
+                      handleSpeakAi(lastAi.id, lastAi.text);
+                    }
+                  }}
                 />
               </View>
 
@@ -399,7 +595,15 @@ function UserMessage({
   );
 }
 
-function AiMessage({ message }: { message: Extract<Message, { role: "ai" }> }) {
+function AiMessage({
+  message,
+  speaking,
+  onSpeak,
+}: {
+  message: Extract<Message, { role: "ai" }>;
+  speaking: boolean;
+  onSpeak: () => void;
+}) {
   return (
     <View style={styles.aiRow}>
       <View style={styles.aiAvatarWrap}>
@@ -417,10 +621,22 @@ function AiMessage({ message }: { message: Extract<Message, { role: "ai" }> }) {
           <AppText type="pretendard-b" style={styles.aiText}>
             {message.text}
           </AppText>
-          <Pressable style={styles.listenBtn}>
-            <Ionicons name="volume-high" size={16} color="#5BC4AE" />
+          <Pressable
+            onPress={onSpeak}
+            disabled={!message.text}
+            style={({ pressed }) => [
+              styles.listenBtn,
+              speaking && { backgroundColor: "#D6F1EA" },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Ionicons
+              name={speaking ? "stop" : "volume-high"}
+              size={16}
+              color="#5BC4AE"
+            />
             <AppText type="pretendard-b" style={styles.listenText}>
-              다시 듣기
+              {speaking ? "멈추기" : "다시 듣기"}
             </AppText>
           </Pressable>
         </View>
@@ -634,6 +850,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#F4F2EA",
     justifyContent: "center",
     alignItems: "center",
+  },
+  previewSend: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#5BC4AE",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  previewSendDisabled: {
+    backgroundColor: "#BBB",
   },
 
   /* 하단 도크 */

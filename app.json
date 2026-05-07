@@ -4,7 +4,7 @@
     "slug": "Ppiyaki",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.jpg",
+    "icon": "./assets/images/icon.png",
     "scheme": "ppiyaki",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -53,6 +53,12 @@
         "expo-camera",
         {
           "cameraPermission": "처방전을 촬영하기 위해 카메라 권한이 필요합니다."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "음성으로 삐약이와 대화하기 위해 마이크 권한이 필요합니다."
         }
       ]
     ],
