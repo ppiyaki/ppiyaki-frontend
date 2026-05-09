@@ -1,7 +1,7 @@
 import AppText from "@/components/app-text";
 import SeniorSummaryHeader from "@/components/senior-summary-header";
 import { getMe } from "@/services/auth";
-import { LinkedSenior, listLinkedSeniors } from "@/services/caregivers";
+import { LinkedSenior, resolveLinkedSenior } from "@/services/caregivers";
 import { listMedicines, Medicine } from "@/services/medicines";
 import { listPrescriptions } from "@/services/prescriptions";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -91,10 +91,10 @@ export default function FamilyHomeScreen() {
       })();
 
       // 2) 연결된 시니어 → 약물 + 검토 대기 처방전 (v0.9.2: seniorId 쿼리 필수)
+      // resolveLinkedSenior: listLinkedSeniors 실패 시 dev 폴백 사용
       (async () => {
         try {
-          const res = await listLinkedSeniors();
-          const first = res.responses[0] ?? null;
+          const first = await resolveLinkedSenior();
           if (cancelled) return;
           setSenior(first);
           if (first) {

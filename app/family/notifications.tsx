@@ -1,6 +1,6 @@
 import AppText from "@/components/app-text";
 import { ApiError } from "@/services/api";
-import { listLinkedSeniors } from "@/services/caregivers";
+import { resolveSeniorId } from "@/services/caregivers";
 import { listMedicationLogs } from "@/services/medication-logs";
 import { listPrescriptions } from "@/services/prescriptions";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -53,13 +53,7 @@ export default function FamilyNotificationsScreen() {
       const items: NotifItem[] = [];
 
       // 1) 연결된 시니어 ID — listPrescriptions / listMedicationLogs 모두 v0.9.2 이후 seniorId 필수
-      let seniorId: number | undefined;
-      try {
-        const seniorsRes = await listLinkedSeniors();
-        seniorId = seniorsRes.responses[0]?.id;
-      } catch (e) {
-        console.log("[notif] listLinkedSeniors failed:", e);
-      }
+      const seniorId = await resolveSeniorId();
 
       // 2) 처방전 검토 대기 → warning
       try {

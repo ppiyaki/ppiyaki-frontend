@@ -1,7 +1,7 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { ApiError } from "@/services/api";
-import { listLinkedSeniors } from "@/services/caregivers";
+import { resolveSeniorId } from "@/services/caregivers";
 import {
   listPrescriptions,
   PrescriptionStatus,
@@ -45,13 +45,7 @@ export default function FamilyPrescriptionsScreen() {
             ? "CONFIRMED"
             : undefined;
       // v0.9.2: 보호자는 seniorId 쿼리 필수
-      let seniorId: number | undefined;
-      try {
-        const seniorsRes = await listLinkedSeniors();
-        seniorId = seniorsRes.responses[0]?.id;
-      } catch (e) {
-        console.log("[family/prescriptions] listLinkedSeniors failed:", e);
-      }
+      const seniorId = await resolveSeniorId();
       const res = await listPrescriptions(status, seniorId);
       setItems(res.responses);
     } catch (e) {
