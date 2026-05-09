@@ -1,8 +1,25 @@
 import AppText from "@/components/app-text";
 import SeniorSummaryHeader from "@/components/senior-summary-header";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { ComponentProps, useState } from "react";
+import { ApiError } from "@/services/api";
+import { resolveLinkedSenior } from "@/services/caregivers";
 import {
+  DailyDashboard,
+  DailySlot,
+  DayStatus,
+  getDashboardDaily,
+  getDashboardMonthly,
+  getDashboardWeekly,
+  MonthlyDashboard,
+  SlotStatus,
+  WeeklyDashboard,
+  WeeklyDay,
+} from "@/services/dashboard";
+import { fromServerSlot, MealSlot } from "@/services/user-settings";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
+import { ComponentProps, useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
   Image,
   ImageSourcePropType,
   Pressable,
@@ -14,27 +31,101 @@ import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type Period = "day" | "week" | "month";
-type DoseStatus = "done" | "warn" | "miss" | "ongoing" | "none";
 type IoniconName = ComponentProps<typeof Ionicons>["name"];
 
-const SENIOR = {
-  name: "김장군",
-  caregiver: "김철수",
-  daysLeft: 3,
-  image: require("../../assets/images/pf/pfimg2.png"),
+const DEFAULT_SENIOR_IMAGE: ImageSourcePropType = require("../../assets/images/pf/pfimg2.png");
+
+/* ────────────────────── helpers: 날짜 ────────────────────── */
+
+function toIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function toYearMonth(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+/** 일요일 시작 weekStart 계산 */
+function getWeekStart(d: Date): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() - r.getDay());
+  r.setHours(0, 0, 0, 0);
+  return r;
+}
+
+const KOREAN_DOW = ["일", "월", "화", "수", "목", "금", "토"];
+
+function formatDateLabelKo(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${KOREAN_DOW[d.getDay()]})`;
+}
+
+/* ────────────────────── helpers: 색상 ────────────────────── */
+
+interface Palette {
+  color: string;
+  bg: string;
+}
+
+function paletteForStatus(s: DayStatus | SlotStatus): Palette {
+  switch (s) {
+    case "PERFECT":
+      return { color: "#5BC4AE", bg: "#E8F7F2" };
+    case "DELAYED":
+    case "PENDING":
+      return { color: "#F8B835", bg: "#FFF4C7" };
+    case "MISSED":
+      return { color: "#E14B4B", bg: "#FCEBEB" };
+    case "FUTURE":
+    case "NOT_SCHEDULED":
+    default:
+      return { color: "#CFCFCF", bg: "#F4F2EA" };
+  }
+}
+
+const SLOT_LABEL: Record<MealSlot, string> = {
+  morning: "아침",
+  noon: "점심",
+  night: "저녁",
 };
+
+const SLOT_ICON: Record<MealSlot, IoniconName> = {
+  morning: "sunny",
+  noon: "restaurant",
+  night: "moon",
+};
+
+/* ────────────────────── 메인 ────────────────────── */
 
 export default function FamilyRecordScreen() {
   const [period, setPeriod] = useState<Period>("day");
+  const [seniorId, setSeniorId] = useState<number | null>(null);
+  const [seniorName, setSeniorName] = useState<string>("어르신");
+
+  // 시니어 ID 부트스트랩
+  useEffect(() => {
+    void (async () => {
+      const s = await resolveLinkedSenior();
+      if (s) {
+        setSeniorId(s.id);
+        setSeniorName(s.nickname);
+      }
+    })();
+  }, []);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.fixedTop}>
         <SeniorSummaryHeader
-          name={SENIOR.name}
-          caregiver={SENIOR.caregiver}
-          daysLeft={SENIOR.daysLeft}
-          image={SENIOR.image}
+          name={seniorName}
+          caregiver=""
+          daysLeft={0}
+          image={DEFAULT_SENIOR_IMAGE}
         />
         <PeriodToggle value={period} onChange={setPeriod} />
       </View>
@@ -44,16 +135,24 @@ export default function FamilyRecordScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View key={period} entering={FadeIn.duration(180)}>
-          {period === "day" && <DailyView />}
-          {period === "week" && <WeeklyView />}
-          {period === "month" && <MonthlyView />}
+          {seniorId === null ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator size="large" color="#FFD24D" />
+            </View>
+          ) : period === "day" ? (
+            <DailyView seniorId={seniorId} />
+          ) : period === "week" ? (
+            <WeeklyView seniorId={seniorId} />
+          ) : (
+            <MonthlyView seniorId={seniorId} />
+          )}
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-/* ──────────────────────── 토글 ──────────────────────── */
+/* ────────────────────── 토글 ────────────────────── */
 
 function PeriodToggle({
   value,
@@ -90,95 +189,83 @@ function PeriodToggle({
   );
 }
 
-/* ──────────────────────── 일간 ──────────────────────── */
+/* ────────────────────── 일간 ────────────────────── */
 
-interface DailyDose {
-  slot: "morning" | "noon" | "night";
-  label: string;
-  photo?: ImageSourcePropType;
-  done: boolean;
-}
+function DailyView({ seniorId }: { seniorId: number }) {
+  const [data, setData] = useState<DailyDashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-const DAILY_DOSES: DailyDose[] = [
-  { slot: "morning", label: "아침", done: true },
-  { slot: "noon", label: "점심", done: true },
-  { slot: "night", label: "저녁", done: false },
-];
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const today = toIsoDate(new Date());
+      setLoading(true);
+      setError(null);
+      void (async () => {
+        try {
+          const res = await getDashboardDaily(seniorId, today);
+          if (!cancelled) setData(res);
+        } catch (e) {
+          if (!cancelled) {
+            setError(
+              e instanceof ApiError
+                ? e.toUserMessage()
+                : "일간 기록을 불러오지 못했어요",
+            );
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [seniorId]),
+  );
 
-interface PillItem {
-  id: string;
-  name: string;
-  schedule: ("morning" | "noon" | "night")[];
-}
+  if (loading) {
+    return (
+      <View style={s.loadingBoxInline}>
+        <ActivityIndicator size="large" color="#FFD24D" />
+      </View>
+    );
+  }
+  if (error || !data) {
+    return (
+      <View style={s.errorBox}>
+        <AppText type="pretendard-m" style={s.errorText}>
+          {error ?? "데이터가 없어요"}
+        </AppText>
+      </View>
+    );
+  }
 
-const PILLS: PillItem[] = [
-  {
-    id: "1",
-    name: "지스로맥스정250mg",
-    schedule: ["morning"],
-  },
-  {
-    id: "2",
-    name: "엘도신캡슐",
-    schedule: ["morning", "night"],
-  },
-  {
-    id: "3",
-    name: "코슈정",
-    schedule: ["morning"],
-  },
-  {
-    id: "4",
-    name: "바실리스캡슐",
-    schedule: ["noon"],
-  },
-  {
-    id: "5",
-    name: "소화제",
-    schedule: ["morning", "night"],
-  },
-];
-
-function DailyView() {
-  const total = DAILY_DOSES.length;
-  const completed = DAILY_DOSES.filter((d) => d.done).length;
-  const percent = Math.round((completed / total) * 100);
+  const completed = data.slots.filter(
+    (slot) => slot.status === "PERFECT" || slot.status === "DELAYED",
+  ).length;
+  const totalScheduled = data.slots.filter(
+    (slot) => slot.status !== "NOT_SCHEDULED",
+  ).length;
 
   return (
     <View style={{ gap: 14 }}>
       <SectionTitle title="일간 성취도" />
 
       <View style={s.dailyCard}>
-        <View style={s.achieveRow}>
-          {/* <View style={s.percentCircle}>
-            <AppText type="extrabold" style={s.percentNum}>
-              {percent}%
-            </AppText>
-            <AppText type="pretendard-m" style={s.percentLabel}>
-              오늘 성취도
-            </AppText>
-          </View> */}
-          <View style={s.achieveText}>
-            {/* <AppText type="pretendard-b" style={s.achieveTitle}>
-              {percent >= 80
-                ? "잘하고 있어요!"
-                : percent >= 50
-                  ? "조금 더 힘내요!"
-                  : "복약을 챙겨주세요"}
-            </AppText> */}
-            <AppText type="pretendard-m" style={s.achieveDesc}>
-              오늘 {total}회 중{" "}
-              <AppText type="extrabold" style={{ color: "#5BC4AE" }}>
-                {completed}회
-              </AppText>{" "}
-              복용 완료
-            </AppText>
-          </View>
+        <View style={s.achieveText}>
+          <AppText type="pretendard-m" style={s.achieveDesc}>
+            오늘 {totalScheduled}회 중{" "}
+            <AppText type="extrabold" style={{ color: "#5BC4AE" }}>
+              {completed}회
+            </AppText>{" "}
+            복용 완료
+          </AppText>
         </View>
 
         <View style={s.photoRow}>
-          {DAILY_DOSES.map((d) => (
-            <PhotoSlot key={d.slot} dose={d} />
+          {data.slots.map((slot) => (
+            <PhotoSlot key={slot.slot} slot={slot} />
           ))}
         </View>
       </View>
@@ -187,30 +274,45 @@ function DailyView() {
         <AppText type="pretendard-b" style={s.sectionTitle}>
           상세 복약 정보
         </AppText>
-        <Pressable
-          hitSlop={10}
-          style={({ pressed }) => [s.addBtn, pressed && { opacity: 0.6 }]}
-        >
-          <Ionicons name="add" size={18} color="#F8B835" />
-        </Pressable>
       </View>
 
       <View style={s.pillCard}>
-        {PILLS.map((p, idx) => (
-          <PillRow key={p.id} pill={p} showDivider={idx < PILLS.length - 1} />
-        ))}
+        {data.medicines.length === 0 ? (
+          <View style={{ padding: 24, alignItems: "center" }}>
+            <AppText type="pretendard-m" style={{ color: "#888" }}>
+              등록된 약이 없어요
+            </AppText>
+          </View>
+        ) : (
+          data.medicines.map((m, idx) => (
+            <PillRow
+              key={m.medicineId}
+              name={m.name}
+              activeSlots={m.slots.map(fromServerSlot)}
+              showDivider={idx < data.medicines.length - 1}
+            />
+          ))
+        )}
       </View>
     </View>
   );
 }
 
-function PhotoSlot({ dose }: { dose: DailyDose }) {
+function PhotoSlot({ slot }: { slot: DailySlot }) {
+  const palette = paletteForStatus(slot.status);
+  const localSlot = fromServerSlot(slot.slot);
+  const done = slot.status === "PERFECT" || slot.status === "DELAYED";
   return (
     <View style={s.photoSlot}>
-      <View style={[s.photoBox, dose.done ? s.photoBoxDone : s.photoBoxEmpty]}>
-        {dose.photo ? (
+      <View
+        style={[
+          s.photoBox,
+          { backgroundColor: palette.bg },
+        ]}
+      >
+        {slot.photoUrl ? (
           <Image
-            source={dose.photo}
+            source={{ uri: slot.photoUrl }}
             style={{ width: "100%", height: "100%", borderRadius: 14 }}
             resizeMode="cover"
           />
@@ -218,58 +320,73 @@ function PhotoSlot({ dose }: { dose: DailyDose }) {
           <Ionicons
             name="camera"
             size={36}
-            color={dose.done ? "#999" : "#BBB"}
+            color={done ? "#999" : "#BBB"}
           />
         )}
       </View>
       <View style={s.photoLabelRow}>
         <AppText type="pretendard-b" style={s.photoLabel}>
-          {dose.label}
+          {SLOT_LABEL[localSlot]}
         </AppText>
-        {dose.done ? (
-          <View style={s.photoCheckMint}>
-            <Ionicons name="checkmark" size={10} color="#FFF" />
-          </View>
-        ) : (
-          <View style={s.photoCheckEmpty} />
-        )}
+        <StatusDotMini status={slot.status} />
       </View>
     </View>
   );
 }
 
+function StatusDotMini({ status }: { status: SlotStatus }) {
+  if (status === "PERFECT") {
+    return (
+      <View style={[s.photoCheckMini, { backgroundColor: "#5BC4AE" }]}>
+        <Ionicons name="checkmark" size={10} color="#FFF" />
+      </View>
+    );
+  }
+  if (status === "DELAYED" || status === "PENDING") {
+    return (
+      <View style={[s.photoCheckMini, { backgroundColor: "#F8B835" }]}>
+        <Ionicons name="time" size={10} color="#FFF" />
+      </View>
+    );
+  }
+  if (status === "MISSED") {
+    return (
+      <View style={[s.photoCheckMini, { backgroundColor: "#E14B4B" }]}>
+        <Ionicons name="close" size={10} color="#FFF" />
+      </View>
+    );
+  }
+  return <View style={s.photoCheckEmpty} />;
+}
+
 function PillRow({
-  pill,
+  name,
+  activeSlots,
   showDivider,
 }: {
-  pill: PillItem;
+  name: string;
+  activeSlots: MealSlot[];
   showDivider: boolean;
 }) {
-  const slots: ("morning" | "noon" | "night")[] = ["morning", "noon", "night"];
+  const slots: MealSlot[] = ["morning", "noon", "night"];
   return (
     <View style={[s.pillRow, showDivider && s.pillRowDivider]}>
       <View style={s.pillIcon}>
         <MaterialCommunityIcons name="pill" size={20} color="#5BC4AE" />
       </View>
       <AppText type="pretendard-b" style={s.pillName} numberOfLines={1}>
-        {pill.name}
+        {name}
       </AppText>
       <View style={s.slotRow}>
         {slots.map((slot) => {
-          const on = pill.schedule.includes(slot);
+          const on = activeSlots.includes(slot);
           return (
             <View
               key={slot}
               style={[s.slotBadge, on ? s.slotBadgeOn : s.slotBadgeOff]}
             >
               <Ionicons
-                name={
-                  slot === "morning"
-                    ? "sunny"
-                    : slot === "noon"
-                      ? "restaurant"
-                      : "moon"
-                }
+                name={SLOT_ICON[slot]}
                 size={14}
                 color={on ? "#F8B835" : "#CCC"}
               />
@@ -277,99 +394,66 @@ function PillRow({
           );
         })}
       </View>
-      <View style={s.pillTail}>
-        <MaterialCommunityIcons name="pill" size={18} color="#5BC4AE" />
-      </View>
     </View>
   );
 }
 
-/* ──────────────────────── 주간 ──────────────────────── */
+/* ────────────────────── 주간 ────────────────────── */
 
-interface WeekDay {
-  label: string;
-  status: DoseStatus;
-  isToday?: boolean;
-  date?: number;
-}
+function WeeklyView({ seniorId }: { seniorId: number }) {
+  const [data, setData] = useState<WeeklyDashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-const WEEK: WeekDay[] = [
-  { label: "일", status: "done" },
-  { label: "월", status: "done" },
-  { label: "화", status: "done" },
-  { label: "수", status: "ongoing", isToday: true },
-  { label: "목", status: "none" },
-  { label: "금", status: "none" },
-  { label: "토", status: "none" },
-];
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const weekStart = toIsoDate(getWeekStart(new Date()));
+      setLoading(true);
+      setError(null);
+      void (async () => {
+        try {
+          const res = await getDashboardWeekly(seniorId, weekStart);
+          if (!cancelled) setData(res);
+        } catch (e) {
+          if (!cancelled) {
+            setError(
+              e instanceof ApiError
+                ? e.toUserMessage()
+                : "주간 기록을 불러오지 못했어요",
+            );
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [seniorId]),
+  );
 
-interface WeekDetailRow {
-  date: string;
-  morning: DoseStatus;
-  noon: DoseStatus;
-  night: DoseStatus;
-  pill: DoseStatus;
-  isToday?: boolean;
-}
+  if (loading) {
+    return (
+      <View style={s.loadingBoxInline}>
+        <ActivityIndicator size="large" color="#FFD24D" />
+      </View>
+    );
+  }
+  if (error || !data) {
+    return (
+      <View style={s.errorBox}>
+        <AppText type="pretendard-m" style={s.errorText}>
+          {error ?? "데이터가 없어요"}
+        </AppText>
+      </View>
+    );
+  }
 
-const WEEK_DETAIL: WeekDetailRow[] = [
-  {
-    date: "3월 22일 (일)",
-    morning: "done",
-    noon: "done",
-    night: "done",
-    pill: "done",
-  },
-  {
-    date: "3월 23일 (월)",
-    morning: "done",
-    noon: "done",
-    night: "done",
-    pill: "done",
-  },
-  {
-    date: "3월 24일 (화)",
-    morning: "done",
-    noon: "done",
-    night: "done",
-    pill: "done",
-  },
-  {
-    date: "3월 25일 (수)",
-    morning: "done",
-    noon: "done",
-    night: "ongoing",
-    pill: "ongoing",
-    isToday: true,
-  },
-  {
-    date: "3월 26일 (목)",
-    morning: "none",
-    noon: "none",
-    night: "none",
-    pill: "none",
-  },
-  {
-    date: "3월 27일 (금)",
-    morning: "none",
-    noon: "none",
-    night: "none",
-    pill: "none",
-  },
-  {
-    date: "3월 28일 (토)",
-    morning: "none",
-    noon: "none",
-    night: "none",
-    pill: "none",
-  },
-];
-
-function WeeklyView() {
-  const successCount = WEEK.filter((d) => d.status === "done").length;
-  const elapsed = WEEK.filter((d) => d.status !== "none").length;
-  const percent =
-    elapsed > 0 ? ((successCount / elapsed) * 100).toFixed(2) : "0";
+  const adherence =
+    data.adherenceRate === null ? "—" : `${data.adherenceRate.toFixed(2)}%`;
+  const adherenceFillPct = data.adherenceRate ?? 0;
+  const todayIso = toIsoDate(new Date());
 
   return (
     <View style={{ gap: 14 }}>
@@ -388,18 +472,14 @@ function WeeklyView() {
                 금주 복약 이행률
               </AppText>
               <AppText type="extrabold" style={s.weekPercent}>
-                {percent}%
+                {adherence}
               </AppText>
             </View>
             <View style={s.weekProgressTrack}>
               <View
                 style={[
                   s.weekProgressFill,
-                  {
-                    width: `${
-                      elapsed > 0 ? (successCount / elapsed) * 100 : 0
-                    }%`,
-                  },
+                  { width: `${adherenceFillPct}%` },
                 ]}
               />
             </View>
@@ -407,91 +487,102 @@ function WeeklyView() {
         </View>
 
         <View style={s.weekDayRow}>
-          {WEEK.map((d, idx) => (
-            <WeekDayCell key={idx} day={d} />
+          {data.days.map((d) => (
+            <WeekDayCell
+              key={d.date}
+              day={d}
+              isToday={d.date === todayIso}
+            />
           ))}
         </View>
       </View>
 
       <AppText type="pretendard-b" style={s.sectionTitle}>
-        상세일지 (3월 22일 ~ 28일)
+        상세일지 ({formatDateLabelKo(data.weekStart)} ~{" "}
+        {formatDateLabelKo(data.weekEnd)})
       </AppText>
 
       <View style={{ gap: 8 }}>
-        {WEEK_DETAIL.map((row) => (
-          <WeekDetailCard key={row.date} row={row} />
+        {data.days.map((row) => (
+          <WeekDetailCard
+            key={row.date}
+            row={row}
+            isToday={row.date === todayIso}
+          />
         ))}
       </View>
     </View>
   );
 }
 
-function WeekDayCell({ day }: { day: WeekDay }) {
+function WeekDayCell({
+  day,
+  isToday,
+}: {
+  day: WeeklyDay;
+  isToday: boolean;
+}) {
+  const dayNum = new Date(day.date).getDate();
+  const dow = KOREAN_DOW[new Date(day.date).getDay()];
   return (
     <View style={s.weekDayCell}>
-      {day.isToday && day.date != null && (
+      {isToday && (
         <View style={s.todayBubble}>
           <AppText type="extrabold" style={s.todayBubbleText}>
-            {day.date}
+            {dayNum}
           </AppText>
         </View>
       )}
       <AppText type="pretendard-b" style={s.weekDayLabel}>
-        {day.label}
+        {dow}
       </AppText>
-      <StatusDot status={day.status} />
+      <StatusDot status={day.dayStatus} />
     </View>
   );
 }
 
-function StatusDot({ status }: { status: DoseStatus }) {
-  if (status === "done") {
+function StatusDot({ status }: { status: DayStatus }) {
+  if (status === "PERFECT") {
     return (
       <View style={[s.statusDot, { backgroundColor: "#5BC4AE" }]}>
         <Ionicons name="checkmark" size={14} color="#FFF" />
       </View>
     );
   }
-  if (status === "warn") {
+  if (status === "DELAYED" || status === "PENDING") {
     return (
       <View style={[s.statusDot, { backgroundColor: "#F8B835" }]}>
-        <Ionicons name="alert" size={14} color="#FFF" />
+        <Ionicons
+          name={status === "DELAYED" ? "alert" : "time"}
+          size={14}
+          color="#FFF"
+        />
       </View>
     );
   }
-  if (status === "miss") {
+  if (status === "MISSED") {
     return (
       <View style={[s.statusDot, { backgroundColor: "#E14B4B" }]}>
         <Ionicons name="close" size={14} color="#FFF" />
       </View>
     );
   }
-  if (status === "ongoing") {
-    return (
-      <View
-        style={[
-          s.statusDot,
-          {
-            backgroundColor: "#FFF",
-            borderWidth: 2,
-            borderColor: "#5BC4AE",
-          },
-        ]}
-      >
-        <Ionicons name="time" size={14} color="#5BC4AE" />
-      </View>
-    );
-  }
   return <View style={[s.statusDot, s.statusDotEmpty]} />;
 }
 
-function WeekDetailCard({ row }: { row: WeekDetailRow }) {
-  const isFuture = row.morning === "none" && !row.isToday;
+function WeekDetailCard({
+  row,
+  isToday,
+}: {
+  row: WeeklyDay;
+  isToday: boolean;
+}) {
+  const isFuture = row.dayStatus === "FUTURE";
   return (
     <View
       style={[
         s.detailRow,
-        row.isToday && s.detailRowToday,
+        isToday && s.detailRowToday,
         isFuture && s.detailRowFuture,
       ]}
     >
@@ -500,13 +591,14 @@ function WeekDetailCard({ row }: { row: WeekDetailRow }) {
           type="pretendard-b"
           style={[s.detailDate, isFuture && s.detailDateFuture]}
         >
-          {row.date}
+          {formatDateLabelKo(row.date)}
         </AppText>
       </View>
-      <DetailIcon kind="morning" status={row.morning} />
-      <DetailIcon kind="noon" status={row.noon} />
-      <DetailIcon kind="night" status={row.night} />
-      <DetailIcon kind="pill" status={row.pill} />
+      {(["BREAKFAST", "LUNCH", "DINNER"] as const).map((slot) => {
+        const marker = row.slots.find((m) => m.slot === slot);
+        const status: SlotStatus = marker?.status ?? "NOT_SCHEDULED";
+        return <DetailIcon key={slot} kind={slot} status={status} />;
+      })}
     </View>
   );
 }
@@ -515,76 +607,71 @@ function DetailIcon({
   kind,
   status,
 }: {
-  kind: "morning" | "noon" | "night" | "pill";
-  status: DoseStatus;
+  kind: "BREAKFAST" | "LUNCH" | "DINNER";
+  status: SlotStatus;
 }) {
-  const palette = paletteFor(status);
-  const iconName: IoniconName | "pill" =
-    kind === "morning"
+  const palette = paletteForStatus(status);
+  const iconName: IoniconName =
+    kind === "BREAKFAST"
       ? "sunny"
-      : kind === "noon"
+      : kind === "LUNCH"
         ? "restaurant"
-        : kind === "night"
-          ? "moon"
-          : "pill";
+        : "moon";
   return (
-    <View
-      style={[
-        s.detailIconBox,
-        { backgroundColor: palette.bg, borderColor: palette.border },
-      ]}
-    >
-      {iconName === "pill" ? (
-        <MaterialCommunityIcons name="pill" size={20} color={palette.color} />
-      ) : (
-        <Ionicons name={iconName} size={20} color={palette.color} />
-      )}
+    <View style={[s.detailIconBox, { backgroundColor: palette.bg }]}>
+      <Ionicons name={iconName} size={20} color={palette.color} />
     </View>
   );
 }
 
-function paletteFor(status: DoseStatus) {
-  if (status === "done")
-    return { color: "#5BC4AE", bg: "#E8F7F2", border: "transparent" };
-  if (status === "warn")
-    return { color: "#F8B835", bg: "#FFF4C7", border: "transparent" };
-  if (status === "miss")
-    return { color: "#E14B4B", bg: "#FCEBEB", border: "transparent" };
-  if (status === "ongoing")
-    return { color: "#5BC4AE", bg: "#E8F7F2", border: "transparent" };
-  return { color: "#CFCFCF", bg: "#F4F2EA", border: "transparent" };
-}
+/* ────────────────────── 월간 ────────────────────── */
 
-/* ──────────────────────── 월간 ──────────────────────── */
+function MonthlyView({ seniorId }: { seniorId: number }) {
+  const [cursor, setCursor] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const [data, setData] = useState<MonthlyDashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-const MONTH_LABEL = "2026년 6월";
-const FIRST_DAY_OFFSET = 3;
-const DAYS_IN_MONTH = 30;
+  useEffect(() => {
+    let cancelled = false;
+    const ym = toYearMonth(cursor);
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const res = await getDashboardMonthly(seniorId, ym);
+        if (!cancelled) setData(res);
+      } catch (e) {
+        if (!cancelled) {
+          setError(
+            e instanceof ApiError
+              ? e.toUserMessage()
+              : "월간 기록을 불러오지 못했어요",
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [seniorId, cursor]);
 
-const MONTH_STATUS: Record<number, DoseStatus> = {
-  6: "done",
-  7: "done",
-  8: "done",
-  9: "warn",
-  10: "done",
-  11: "miss",
-  12: "done",
-  13: "done",
-  14: "done",
-  15: "done",
-  16: "done",
-  17: "done",
-  18: "done",
-  19: "done",
-  20: "done",
-  21: "warn",
-  22: "done",
-  23: "done",
-  24: "done",
-};
-const TODAY_DATE = 25;
+  const monthLabel = `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
 
-function MonthlyView() {
+  const goPrev = () => {
+    setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1));
+  };
+  const goNext = () => {
+    setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1));
+  };
+
+  const todayIso = toIsoDate(new Date());
+
   return (
     <View style={{ gap: 14 }}>
       <View style={s.sectionTitleRow}>
@@ -599,59 +686,75 @@ function MonthlyView() {
       <View style={s.monthCard}>
         <View style={s.monthHeader}>
           <AppText type="pretendard-b" style={s.monthLabel}>
-            {MONTH_LABEL}
+            {monthLabel}
           </AppText>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <Pressable style={s.monthNavBtn}>
+            <Pressable onPress={goPrev} style={s.monthNavBtn}>
               <Ionicons name="chevron-back" size={18} color="#515151" />
             </Pressable>
-            <Pressable style={s.monthNavBtn}>
+            <Pressable onPress={goNext} style={s.monthNavBtn}>
               <Ionicons name="chevron-forward" size={18} color="#515151" />
             </Pressable>
           </View>
         </View>
 
         <View style={s.weekHeader}>
-          {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
+          {KOREAN_DOW.map((d) => (
             <AppText key={d} type="pretendard-r" style={s.weekHeaderText}>
               {d}
             </AppText>
           ))}
         </View>
 
-        <Calendar />
+        {loading ? (
+          <View style={s.loadingBoxInline}>
+            <ActivityIndicator size="small" color="#FFD24D" />
+          </View>
+        ) : error || !data ? (
+          <View style={{ padding: 24, alignItems: "center" }}>
+            <AppText type="pretendard-m" style={s.errorText}>
+              {error ?? "데이터가 없어요"}
+            </AppText>
+          </View>
+        ) : (
+          <Calendar
+            cursor={cursor}
+            statusByDate={Object.fromEntries(
+              data.days.map((d) => [d.date, d.dayStatus]),
+            )}
+            todayIso={todayIso}
+          />
+        )}
       </View>
-
-      <View style={s.sectionTitleRow}>
-        <View style={s.sectionIcon}>
-          <Ionicons name="clipboard-outline" size={16} color="#5BC4AE" />
-        </View>
-        <AppText type="pretendard-b" style={s.sectionTitle}>
-          월간 상세일지
-        </AppText>
-      </View>
-
-      <MonthDetailCard
-        date="6월 9일 (목)"
-        statuses={["warn", "done", "warn", "warn"]}
-        accent="warn"
-      />
-      <MonthDetailCard
-        date="6월 11일 (토)"
-        statuses={["miss", "done", "miss", "miss"]}
-        accent="miss"
-      />
     </View>
   );
 }
 
-function Calendar() {
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < FIRST_DAY_OFFSET; i++) cells.push(null);
-  for (let d = 1; d <= DAYS_IN_MONTH; d++) cells.push(d);
+function Calendar({
+  cursor,
+  statusByDate,
+  todayIso,
+}: {
+  cursor: Date;
+  statusByDate: Record<string, DayStatus>;
+  todayIso: string;
+}) {
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const firstDayOffset = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: (string | null)[] = [];
+  for (let i = 0; i < firstDayOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(
+      d,
+    ).padStart(2, "0")}`;
+    cells.push(iso);
+  }
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const rows: (number | null)[][] = [];
+  const rows: (string | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) {
     rows.push(cells.slice(i, i + 7));
   }
@@ -660,8 +763,13 @@ function Calendar() {
     <View style={{ gap: 6 }}>
       {rows.map((row, idx) => (
         <View key={idx} style={s.calendarRow}>
-          {row.map((d, ci) => (
-            <CalendarCell key={ci} date={d} />
+          {row.map((iso, ci) => (
+            <CalendarCell
+              key={ci}
+              iso={iso}
+              status={iso ? statusByDate[iso] : undefined}
+              isToday={iso === todayIso}
+            />
           ))}
         </View>
       ))}
@@ -669,23 +777,30 @@ function Calendar() {
   );
 }
 
-function CalendarCell({ date }: { date: number | null }) {
-  if (date == null) return <View style={s.calendarCell} />;
-  const status = MONTH_STATUS[date];
-  const isToday = date === TODAY_DATE;
+function CalendarCell({
+  iso,
+  status,
+  isToday,
+}: {
+  iso: string | null;
+  status: DayStatus | undefined;
+  isToday: boolean;
+}) {
+  if (!iso) return <View style={s.calendarCell} />;
+  const dateNum = new Date(iso).getDate();
 
   let bg = "transparent";
   let textColor = "#444";
   if (isToday) {
     bg = "#222";
     textColor = "#FFF";
-  } else if (status === "done") {
+  } else if (status === "PERFECT") {
     bg = "#5BC4AE";
     textColor = "#FFF";
-  } else if (status === "warn") {
+  } else if (status === "DELAYED" || status === "PENDING") {
     bg = "#F8B835";
     textColor = "#FFF";
-  } else if (status === "miss") {
+  } else if (status === "MISSED") {
     bg = "#E14B4B";
     textColor = "#FFF";
   }
@@ -697,80 +812,14 @@ function CalendarCell({ date }: { date: number | null }) {
           type={isToday ? "pretendard-b" : "pretendard-r"}
           style={[s.calendarText, { color: textColor }]}
         >
-          {date}
+          {dateNum}
         </AppText>
       </View>
     </View>
   );
 }
 
-function MonthDetailCard({
-  date,
-  statuses,
-  accent,
-}: {
-  date: string;
-  statuses: DoseStatus[];
-  accent: "warn" | "miss" | "done";
-}) {
-  const accentColor =
-    accent === "warn" ? "#F8B835" : accent === "miss" ? "#E14B4B" : "#5BC4AE";
-  return (
-    <View style={[s.monthDetail, { borderColor: accentColor }]}>
-      <View style={[s.monthDetailBar, { backgroundColor: accentColor }]} />
-      <AppText type="extrabold" style={s.monthDetailDate}>
-        {date}
-      </AppText>
-      <View style={s.monthDetailRow}>
-        {(["morning", "noon", "night", "pill"] as const).map((kind, idx) => (
-          <MonthDetailBadge key={kind} kind={kind} status={statuses[idx]} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function MonthDetailBadge({
-  kind,
-  status,
-}: {
-  kind: "morning" | "noon" | "night" | "pill";
-  status: DoseStatus;
-}) {
-  const palette = paletteFor(status);
-  const labelMap = {
-    morning: "아침",
-    noon: "점심",
-    night: "저녁",
-    pill: "복용",
-  };
-  return (
-    <View style={s.monthDetailBadge}>
-      <View style={[s.monthDetailIconBox, { backgroundColor: palette.bg }]}>
-        {kind === "pill" ? (
-          <MaterialCommunityIcons name="pill" size={22} color={palette.color} />
-        ) : (
-          <Ionicons
-            name={
-              kind === "morning"
-                ? "sunny"
-                : kind === "noon"
-                  ? "restaurant"
-                  : "moon"
-            }
-            size={22}
-            color={palette.color}
-          />
-        )}
-      </View>
-      <AppText type="pretendard-m" style={s.monthDetailLabel}>
-        {labelMap[kind]}
-      </AppText>
-    </View>
-  );
-}
-
-/* ──────────────────────── 공통 helpers ──────────────────────── */
+/* ────────────────────── 공통 helpers ────────────────────── */
 
 function SectionTitle({ title }: { title: string }) {
   return (
@@ -780,7 +829,7 @@ function SectionTitle({ title }: { title: string }) {
   );
 }
 
-/* ──────────────────────── styles ──────────────────────── */
+/* ────────────────────── styles ────────────────────── */
 
 const styles = StyleSheet.create({
   safe: {
@@ -796,6 +845,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 32,
+  },
+  loadingBox: {
+    paddingVertical: 80,
+    alignItems: "center",
   },
 });
 
@@ -844,14 +897,6 @@ const s = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  addBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#FFF1C8",
-    justifyContent: "center",
-    alignItems: "center",
-  },
 
   /* 일간 */
   dailyCard: {
@@ -862,37 +907,9 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1ECDB",
   },
-  achieveRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  percentCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 8,
-    borderColor: "#5BC4AE",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#FFF",
-  },
-  percentNum: {
-    fontSize: 26,
-    color: "#5BC4AE",
-  },
-  percentLabel: {
-    fontSize: 11,
-    color: "#5BC4AE",
-    marginTop: -2,
-  },
   achieveText: {
     flex: 1,
     gap: 4,
-  },
-  achieveTitle: {
-    fontSize: 18,
-    color: "#222",
   },
   achieveDesc: {
     fontSize: 14,
@@ -914,12 +931,6 @@ const s = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  photoBoxDone: {
-    backgroundColor: "#E8F7F2",
-  },
-  photoBoxEmpty: {
-    backgroundColor: "#F4F2EA",
-  },
   photoLabelRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -929,11 +940,10 @@ const s = StyleSheet.create({
     fontSize: 14,
     color: "#222",
   },
-  photoCheckMint: {
+  photoCheckMini: {
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: "#5BC4AE",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -993,15 +1003,6 @@ const s = StyleSheet.create({
   },
   slotBadgeOff: {
     backgroundColor: "#F4F2EA",
-  },
-  pillTail: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#5BC4AE",
-    justifyContent: "center",
-    alignItems: "center",
   },
 
   /* 주간 */
@@ -1183,46 +1184,17 @@ const s = StyleSheet.create({
     fontSize: 13,
   },
 
-  /* 월간 detail */
-  monthDetail: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingRight: 14,
-    borderWidth: 1.5,
-    overflow: "hidden",
-  },
-  monthDetailBar: {
-    width: 4,
-    alignSelf: "stretch",
-    marginRight: 6,
-  },
-  monthDetailDate: {
-    fontSize: 16,
-    color: "#222",
-    width: 100,
-  },
-  monthDetailRow: {
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  monthDetailBadge: {
-    alignItems: "center",
-    gap: 4,
-  },
-  monthDetailIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    justifyContent: "center",
+  /* loading/error */
+  loadingBoxInline: {
+    paddingVertical: 60,
     alignItems: "center",
   },
-  monthDetailLabel: {
-    fontSize: 11,
-    color: "#666",
+  errorBox: {
+    paddingVertical: 60,
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#888",
   },
 });

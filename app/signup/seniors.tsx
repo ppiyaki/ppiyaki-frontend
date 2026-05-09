@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const GENDERS: Gender[] = ["남", "여", "비공개"];
+const GENDERS: Gender[] = ["남", "여"];
 
 export default function SeniorsScreen() {
   const router = useRouter();

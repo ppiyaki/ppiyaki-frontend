@@ -1,10 +1,40 @@
 import AppText from "@/components/app-text";
 import SignupProgress from "@/components/signup-progress";
-import { CareMode, useSignup } from "@/contexts/signup-context";
+import { useConfirm } from "@/contexts/confirm-context";
+import {
+  CareMode,
+  Gender,
+  IssuedCode,
+  useSignup,
+} from "@/contexts/signup-context";
+import { ApiError } from "@/services/api";
+import {
+  NotificationMode,
+  OnboardingSeniorInput,
+  SeniorGender,
+  onboardCaregiver,
+} from "@/services/auth";
+import { issueInviteCode } from "@/services/care-relations";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+function toApiGender(g: Gender): SeniorGender {
+  return g === "남" ? "MALE" : "FEMALE";
+}
+
+function toApiNotificationMode(m: CareMode): NotificationMode {
+  return m === "intensive" ? "DETAILED_ALERT" : "BASIC_ALERT";
+}
 
 type ModeDef = {
   key: CareMode;
@@ -46,10 +76,78 @@ const MODES: ModeDef[] = [
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { seniors, careModes, setCareMode } = useSignup();
+  const confirm = useConfirm();
+  const {
+    nickname,
+    seniors,
+    careModes,
+    setCareMode,
+    setIssuedCodes,
+  } = useSignup();
+  const [submitting, setSubmitting] = useState(false);
 
   const allSelected =
     seniors.length > 0 && seniors.every((s) => careModes[s.id]);
+  const canProceed = allSelected && !submitting;
+
+  const handleNext = async () => {
+    if (!canProceed) return;
+    setSubmitting(true);
+    try {
+      const body = {
+        nickname: nickname.trim(),
+        seniors: seniors.map<OnboardingSeniorInput>((s) => ({
+          nickname: s.name.trim(),
+          gender: toApiGender(s.gender),
+          notificationMode: toApiNotificationMode(careModes[s.id]),
+        })),
+      };
+      const res = await onboardCaregiver(body);
+
+      // 생성된 시니어들에 대해 초대 코드 일괄 발급
+      const codes = await Promise.all(
+        res.seniors.map<Promise<IssuedCode>>(async (s) => {
+          try {
+            const r = await issueInviteCode(s.seniorId);
+            return {
+              seniorId: s.seniorId,
+              nickname: s.nickname,
+              inviteCode: r.inviteCode,
+              error: null,
+            };
+          } catch (err) {
+            return {
+              seniorId: s.seniorId,
+              nickname: s.nickname,
+              inviteCode: null,
+              error:
+                err instanceof ApiError
+                  ? err.toUserMessage()
+                  : "코드 발급에 실패했어요",
+            };
+          }
+        }),
+      );
+      setIssuedCodes(codes);
+      router.push("/signup/complete" as any);
+    } catch (e) {
+      const isConflict = e instanceof ApiError && e.status === 409;
+      const msg = isConflict
+        ? "이미 온보딩이 완료된 계정이에요. 홈으로 이동할게요."
+        : e instanceof ApiError
+          ? e.toUserMessage()
+          : "온보딩에 실패했어요";
+      await confirm({
+        title: isConflict ? "이미 가입됨" : "온보딩 실패",
+        message: msg,
+        confirmText: "확인",
+        cancelText: "닫기",
+      });
+      if (isConflict) router.replace("/family" as any);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView
@@ -107,13 +205,17 @@ export default function NotificationsScreen() {
 
       <View style={styles.footer}>
         <Pressable
-          style={[styles.btn, !allSelected && styles.btnDisabled]}
-          disabled={!allSelected}
-          onPress={() => router.push("/signup/complete" as any)}
+          style={[styles.btn, !canProceed && styles.btnDisabled]}
+          disabled={!canProceed}
+          onPress={handleNext}
         >
-          <AppText type="pretendard-b" style={styles.btnText}>
-            다음
-          </AppText>
+          {submitting ? (
+            <ActivityIndicator color="#171717" />
+          ) : (
+            <AppText type="pretendard-b" style={styles.btnText}>
+              다음
+            </AppText>
+          )}
         </Pressable>
       </View>
     </SafeAreaView>

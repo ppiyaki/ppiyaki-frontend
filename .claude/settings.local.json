@@ -3,7 +3,10 @@
     "allow": [
       "WebFetch(domain:www.notion.so)",
       "Bash(rm \"c:\\\\Users\\\\cjy03\\\\Ppiyaki\\\\services\\\\schedule-parser.ts\")",
-      "Bash(npx expo *)"
+      "Bash(npx expo *)",
+      "Bash(npx tsc *)",
+      "Bash(Select-String -Pattern \"\\(signup|notifications|complete|seniors|nickname|family-onboarding\\)\" -SimpleMatch)",
+      "PowerShell(npx tsc --noEmit 2>&1)"
     ],
     "additionalDirectories": [
       "c:\\Users\\cjy03\\Ppiyaki\\services"

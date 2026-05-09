@@ -1,8 +1,12 @@
 import AppText from "@/components/app-text";
+import { useConfirm } from "@/contexts/confirm-context";
+import { ApiError } from "@/services/api";
+import { loginWithInviteCode } from "@/services/auth";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,9 +18,40 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SeniorConnectScreen() {
   const router = useRouter();
+  const confirm = useConfirm();
   const [code, setCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<TextInput>(null);
-  const canConnect = code.length === 6;
+  const canConnect = code.length === 6 && !submitting;
+
+  const handleConnect = async () => {
+    if (!canConnect) return;
+    setSubmitting(true);
+    try {
+      await loginWithInviteCode(code);
+      router.replace("/(tabs)" as any);
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : 0;
+      const msg =
+        status === 401
+          ? "유효하지 않거나 만료된 코드예요. 보호자에게 새 코드를 받아주세요."
+          : status === 429
+            ? "시도 횟수를 초과했어요. 1분 후 다시 시도해주세요."
+            : e instanceof ApiError
+              ? e.toUserMessage()
+              : "연결에 실패했어요";
+      await confirm({
+        title: "연결 실패",
+        message: msg,
+        confirmText: "확인",
+        cancelText: "닫기",
+      });
+      setCode("");
+      inputRef.current?.focus();
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView
@@ -68,14 +103,18 @@ export default function SeniorConnectScreen() {
               pressed && canConnect && { opacity: 0.85 },
             ]}
             disabled={!canConnect}
-            onPress={() => router.replace("/(tabs)")}
+            onPress={handleConnect}
           >
-            <AppText
-              type="pretendard-b"
-              style={[styles.btnText, !canConnect && styles.btnTextDisabled]}
-            >
-              연결하기
-            </AppText>
+            {submitting ? (
+              <ActivityIndicator color="#222" />
+            ) : (
+              <AppText
+                type="pretendard-b"
+                style={[styles.btnText, !canConnect && styles.btnTextDisabled]}
+              >
+                연결하기
+              </AppText>
+            )}
           </Pressable>
         </View>
       </KeyboardAvoidingView>

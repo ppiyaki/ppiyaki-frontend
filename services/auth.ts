@@ -53,6 +53,105 @@ export async function loginWithKakao(): Promise<AuthResponse> {
 }
 
 /**
+ * 시니어 초대 코드 로그인. 보호자가 발급한 6자리 코드로 인증.
+ *  - 인증 헤더 불필요
+ *  - 401: 유효하지 않거나 만료된 코드
+ *  - 429: Rate Limit (IP 기준 1분 10회 실패)
+ */
+export async function loginWithInviteCode(
+  code: string,
+): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>("/api/v1/auth/code-login", {
+    method: "POST",
+    skipAuth: true,
+    json: { code },
+  });
+  await saveTokens(data.accessToken, data.refreshToken);
+  return data;
+}
+
+/* ────────── 보호자 로컬 로그인/회원가입 ────────── */
+
+/**
+ * loginId + password 로컬 로그인.
+ *  - 401: ID/비밀번호 불일치 (AUTH_004)
+ */
+export async function loginLocal(
+  loginId: string,
+  password: string,
+): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>("/api/v1/auth/login", {
+    method: "POST",
+    skipAuth: true,
+    json: { loginId, password },
+  });
+  await saveTokens(data.accessToken, data.refreshToken);
+  return data;
+}
+
+/**
+ * loginId + password + nickname 로컬 회원가입. role=CAREGIVER 자동.
+ *  - 가입 즉시 JWT 발급 + isOnboarded=true 응답
+ *  - 409: loginId 중복 (AUTH_003)
+ */
+export async function signupLocal(
+  loginId: string,
+  password: string,
+  nickname: string,
+): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>("/api/v1/auth/signup", {
+    method: "POST",
+    skipAuth: true,
+    json: { loginId, password, nickname },
+  });
+  await saveTokens(data.accessToken, data.refreshToken);
+  clearMeCache();
+  return data;
+}
+
+/* ────────── 보호자 온보딩 ────────── */
+
+export type SeniorGender = "MALE" | "FEMALE";
+export type NotificationMode = "BASIC_ALERT" | "DETAILED_ALERT";
+
+export interface OnboardingSeniorInput {
+  nickname: string;
+  gender: SeniorGender;
+  notificationMode: NotificationMode;
+}
+
+export interface OnboardingBody {
+  nickname: string;
+  seniors: OnboardingSeniorInput[];
+}
+
+export interface OnboardingResponse {
+  caregiverNickname: string;
+  seniors: {
+    seniorId: number;
+    nickname: string;
+    petId: number;
+  }[];
+}
+
+/**
+ * 보호자 최초 온보딩.
+ * 닉네임 설정 + 시니어 N명 대리 생성 한 번에. CAREGIVER 권한 필요.
+ *  - 409 Conflict: 이미 온보딩 완료된 사용자
+ */
+export async function onboardCaregiver(
+  body: OnboardingBody,
+): Promise<OnboardingResponse> {
+  const res = await apiFetch<OnboardingResponse>("/api/v1/onboarding", {
+    method: "POST",
+    json: body,
+  });
+  // 온보딩 후 me 캐시 무효화 (isOnboarded 변경)
+  clearMeCache();
+  return res;
+}
+
+/**
  * 현재 로그인한 사용자 정보 조회 (역할 분기에 사용).
  * 결과는 메모리 캐시되며, force=true 또는 로그아웃 시 클리어.
  */

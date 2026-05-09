@@ -1,11 +1,19 @@
 import AppText from "@/components/app-text";
 import { useConfirm } from "@/contexts/confirm-context";
+import { ApiError } from "@/services/api";
 import { logoutKakao } from "@/services/auth";
+import {
+  InviteCodeResponse,
+  issueInviteCode,
+} from "@/services/care-relations";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   ImageSourcePropType,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,7 +34,9 @@ const USER = {
 
 const LINKED_SENIORS: LinkedSenior[] = [
   {
-    id: "1",
+    // dev 폴백 시니어 ID (백엔드 테스트 시니어 토큰=16)
+    // TODO: listLinkedSeniors 구현되면 실제 목록으로 교체
+    id: "16",
     name: "김장군",
     image: require("../../assets/images/pf/pfimg2.png"),
   },
@@ -45,6 +55,16 @@ const LINKED_SENIORS: LinkedSenior[] = [
 export default function FamilyProfileScreen() {
   const router = useRouter();
   const confirm = useConfirm();
+
+  const [inviteSenior, setInviteSenior] = useState<LinkedSenior | null>(null);
+
+  const openInviteModal = (senior: LinkedSenior) => {
+    setInviteSenior(senior);
+  };
+
+  const closeInviteModal = () => {
+    setInviteSenior(null);
+  };
 
   const handleLogout = async () => {
     const ok = await confirm({
@@ -113,6 +133,7 @@ export default function FamilyProfileScreen() {
                 senior={senior}
                 showDivider={idx < LINKED_SENIORS.length - 1}
                 onUnlink={() => handleUnlink(senior.name)}
+                onManage={() => openInviteModal(senior)}
               />
             ))}
           </View>
@@ -161,18 +182,147 @@ export default function FamilyProfileScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <InviteCodeModal
+        senior={inviteSenior}
+        onClose={closeInviteModal}
+      />
     </SafeAreaView>
   );
+}
+
+function InviteCodeModal({
+  senior,
+  onClose,
+}: {
+  senior: LinkedSenior | null;
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<InviteCodeResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const visible = senior !== null;
+
+  const fetchCode = async (sId: number) => {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const res = await issueInviteCode(sId);
+      setData(res);
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? e.toUserMessage()
+          : "초대 코드 발급에 실패했어요";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // senior prop 변화 감지해서 자동 발급
+  // useEffect 사용 위해 import 추가 필요
+  React.useEffect(() => {
+    if (senior) {
+      void fetchCode(Number(senior.id));
+    } else {
+      setData(null);
+      setError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [senior]);
+
+  const handleReissue = () => {
+    if (senior) void fetchCode(Number(senior.id));
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={() => {}}>
+          <View style={styles.modalHead}>
+            <AppText type="pretendard-b" style={styles.modalTitle}>
+              {senior?.name}님 초대 코드
+            </AppText>
+            <Pressable onPress={onClose} hitSlop={10} style={styles.modalClose}>
+              <Ionicons name="close" size={20} color="#666" />
+            </Pressable>
+          </View>
+
+          <AppText type="pretendard-m" style={styles.modalDesc}>
+            아래 코드를 어르신께 알려드리세요.{"\n"}
+            발급 후 10분간 유효해요.
+          </AppText>
+
+          {loading && (
+            <View style={styles.modalLoading}>
+              <ActivityIndicator size="large" color="#FFD24D" />
+            </View>
+          )}
+
+          {!loading && error && (
+            <AppText type="pretendard-m" style={styles.modalError}>
+              {error}
+            </AppText>
+          )}
+
+          {!loading && data && (
+            <>
+              <View style={styles.codeBox}>
+                <AppText type="extrabold" style={styles.codeText}>
+                  {data.inviteCode}
+                </AppText>
+              </View>
+              <AppText type="pretendard-r" style={styles.expiresText}>
+                만료: {formatExpires(data.expiresAt)}
+              </AppText>
+            </>
+          )}
+
+          <View style={styles.modalActions}>
+            <Pressable
+              onPress={handleReissue}
+              style={({ pressed }) => [
+                styles.modalPrimaryBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Ionicons name="refresh" size={16} color="#222" />
+              <AppText type="pretendard-b" style={styles.modalPrimaryText}>
+                재발급
+              </AppText>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function formatExpires(iso: string): string {
+  const d = new Date(iso);
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 function SeniorRow({
   senior,
   showDivider,
   onUnlink,
+  onManage,
 }: {
   senior: LinkedSenior;
   showDivider: boolean;
   onUnlink: () => void;
+  onManage: () => void;
 }) {
   return (
     <View style={[styles.seniorRow, showDivider && styles.seniorRowDivider]}>
@@ -193,6 +343,7 @@ function SeniorRow({
       </View>
       <View style={styles.seniorActions}>
         <Pressable
+          onPress={onManage}
           style={({ pressed }) => [
             styles.actionPill,
             styles.linkPill,
@@ -415,6 +566,110 @@ const styles = StyleSheet.create({
   settingLabel: {
     flex: 1,
     fontSize: 16,
+    color: "#222",
+  },
+
+  /* ── 초대 코드 모달 ── */
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#FFF",
+    borderRadius: 22,
+    padding: 22,
+    gap: 14,
+  },
+  modalHead: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 18,
+    color: "#222",
+  },
+  modalClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F4F2EA",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalDesc: {
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 20,
+  },
+  modalLoading: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+  modalError: {
+    fontSize: 13,
+    color: "#E14B4B",
+    textAlign: "center",
+    paddingVertical: 16,
+  },
+  codeBox: {
+    backgroundColor: "#FFF8E0",
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FFE9A8",
+  },
+  codeText: {
+    fontSize: 36,
+    color: "#222",
+    letterSpacing: 6,
+  },
+  expiresText: {
+    fontSize: 12,
+    color: "#888",
+    textAlign: "center",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  modalSecondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#BDEFEA",
+    backgroundColor: "#FFF",
+  },
+  modalSecondaryText: {
+    fontSize: 14,
+    color: "#5BC4AE",
+  },
+  modalPrimaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#FFD24D",
+  },
+  modalPrimaryBtnDisabled: {
+    backgroundColor: "#F0EDE0",
+  },
+  modalPrimaryText: {
+    fontSize: 14,
     color: "#222",
   },
 });

@@ -114,13 +114,31 @@ export async function decideCandidate(
   );
 }
 
-/** 처방전 전체 확인 → CONFIRMED 전이 + Medicine 생성 */
+/** v0.9.8: confirm 시 candidate별 잔여분/총량 입력 */
+export interface MedicineAmountInput {
+  candidateId: number;
+  totalAmount: number;
+  remainingAmount: number;
+}
+
+/**
+ * 처방전 전체 확인 → CONFIRMED 전이 + Medicine 생성.
+ * v0.9.8: medicineAmounts(optional)로 candidate별 totalAmount/remainingAmount 전송.
+ *  미전달 candidate는 0/0 fallback (백워드 호환). ACCEPTED/MANUALLY_CORRECTED만 의미 있음.
+ */
 export async function confirmPrescription(
   prescriptionId: number,
+  medicineAmounts?: MedicineAmountInput[],
 ): Promise<PrescriptionDetail> {
   return apiFetch<PrescriptionDetail>(
     `/api/v1/prescriptions/${prescriptionId}/confirm`,
-    { method: "POST" },
+    {
+      method: "POST",
+      json:
+        medicineAmounts && medicineAmounts.length > 0
+          ? { medicineAmounts }
+          : undefined,
+    },
   );
 }
 

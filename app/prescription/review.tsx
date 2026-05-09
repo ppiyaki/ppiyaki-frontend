@@ -2,11 +2,13 @@ import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
+import { getMe } from "@/services/auth";
 import {
   CaregiverDecision,
   confirmPrescription,
   decideCandidate,
   getPrescription,
+  MedicineAmountInput,
   PrescriptionCandidate,
   PrescriptionDetail,
 } from "@/services/prescriptions";
@@ -24,6 +26,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -53,6 +56,14 @@ const SLOT_BG: Record<MealSlot, string> = {
 /** v0.9.3: candidate별 보호자가 선택한 confirmedMealSlots 로컬 상태 */
 type SlotMap = Record<number, Set<MealSlot>>;
 
+/** v0.9.8: candidate별 잔여분/총량 (단위: 정/캡슐 등). 디폴트 30. */
+interface AmountState {
+  total: string;
+  remaining: string;
+}
+type AmountMap = Record<number, AmountState>;
+const DEFAULT_AMOUNT = "30";
+
 export default function PrescriptionReviewScreen() {
   const router = useRouter();
   const confirm = useConfirm();
@@ -64,6 +75,7 @@ export default function PrescriptionReviewScreen() {
   const [busyCandidateId, setBusyCandidateId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [slotMap, setSlotMap] = useState<SlotMap>({});
+  const [amountMap, setAmountMap] = useState<AmountMap>({});
 
   const load = useCallback(async () => {
     if (!prescriptionId) return;
@@ -95,6 +107,15 @@ export default function PrescriptionReviewScreen() {
       }
       return next;
     });
+    // v0.9.8: candidate별 초기 잔여분 = 디폴트 30/30
+    setAmountMap((prev) => {
+      const next: AmountMap = { ...prev };
+      for (const c of detail.candidates) {
+        if (next[c.id]) continue;
+        next[c.id] = { total: DEFAULT_AMOUNT, remaining: DEFAULT_AMOUNT };
+      }
+      return next;
+    });
   }, [detail]);
 
   const toggleSlot = (candidateId: number, slot: MealSlot) => {
@@ -103,6 +124,29 @@ export default function PrescriptionReviewScreen() {
       if (cur.has(slot)) cur.delete(slot);
       else cur.add(slot);
       return { ...prev, [candidateId]: cur };
+    });
+  };
+
+  const updateAmount = (
+    candidateId: number,
+    field: keyof AmountState,
+    value: string,
+  ) => {
+    // 숫자만 허용 (빈 문자열도 허용 — 입력 도중 케이스)
+    const cleaned = value.replace(/[^0-9]/g, "");
+    setAmountMap((prev) => {
+      const cur = prev[candidateId] ?? {
+        total: DEFAULT_AMOUNT,
+        remaining: DEFAULT_AMOUNT,
+      };
+      const next = { ...cur, [field]: cleaned };
+      // total이 변하면 remaining이 total보다 크지 않게 자동 보정
+      if (field === "total") {
+        const t = parseInt(cleaned, 10);
+        const r = parseInt(next.remaining, 10);
+        if (!isNaN(t) && !isNaN(r) && r > t) next.remaining = cleaned;
+      }
+      return { ...prev, [candidateId]: next };
     });
   };
 
@@ -208,7 +252,27 @@ export default function PrescriptionReviewScreen() {
     setSubmitting(true);
     try {
       // v0.9.3: 서버가 confirmedMealSlots 기반으로 schedule 자동 생성
-      const result = await confirmPrescription(prescriptionId);
+      // v0.9.8: ACCEPTED/MANUALLY_CORRECTED candidate별 잔여분 함께 전송
+      const medicineAmounts: MedicineAmountInput[] = detail.candidates
+        .filter(
+          (c) =>
+            c.caregiverDecision === "ACCEPTED" ||
+            c.caregiverDecision === "MANUALLY_CORRECTED",
+        )
+        .map((c) => {
+          const a = amountMap[c.id] ?? {
+            total: DEFAULT_AMOUNT,
+            remaining: DEFAULT_AMOUNT,
+          };
+          const total = parseInt(a.total, 10) || 0;
+          const remaining = Math.min(parseInt(a.remaining, 10) || 0, total);
+          return {
+            candidateId: c.id,
+            totalAmount: total,
+            remainingAmount: remaining,
+          };
+        });
+      const result = await confirmPrescription(prescriptionId, medicineAmounts);
       const accepted = result.candidates.filter(
         (c) =>
           c.caregiverDecision !== "REJECTED" && c.createdMedicineId !== null,
@@ -234,7 +298,15 @@ export default function PrescriptionReviewScreen() {
         cancelText: "닫기",
       });
 
-      router.replace("/(tabs)" as any);
+      // 호출자 역할에 따라 분기 — 시니어/보호자 영역은 절대 교차 X
+      let targetRoute = "/(tabs)";
+      try {
+        const me = await getMe();
+        if (me.role === "CAREGIVER") targetRoute = "/family";
+      } catch {
+        // 무시 — 기본 /(tabs)
+      }
+      router.replace(targetRoute as any);
     } catch (e) {
       await showApiError(e);
       setSubmitting(false);
@@ -295,7 +367,14 @@ export default function PrescriptionReviewScreen() {
             candidate={c}
             busy={busyCandidateId === c.id}
             selectedSlots={slotMap[c.id] ?? new Set()}
+            amount={
+              amountMap[c.id] ?? {
+                total: DEFAULT_AMOUNT,
+                remaining: DEFAULT_AMOUNT,
+              }
+            }
             onToggleSlot={(slot) => toggleSlot(c.id, slot)}
+            onChangeAmount={(field, value) => updateAmount(c.id, field, value)}
             onAccept={() => handleDecide(c.id, "ACCEPTED")}
             onReject={() => handleDecide(c.id, "REJECTED")}
             onCorrect={() => handleManualCorrect(c.id)}
@@ -339,7 +418,9 @@ function CandidateCard({
   candidate,
   busy,
   selectedSlots,
+  amount,
   onToggleSlot,
+  onChangeAmount,
   onAccept,
   onReject,
   onCorrect,
@@ -347,7 +428,9 @@ function CandidateCard({
   candidate: PrescriptionCandidate;
   busy: boolean;
   selectedSlots: Set<MealSlot>;
+  amount: AmountState;
   onToggleSlot: (slot: MealSlot) => void;
+  onChangeAmount: (field: keyof AmountState, value: string) => void;
   onAccept: () => void;
   onReject: () => void;
   onCorrect: () => void;
@@ -356,6 +439,7 @@ function CandidateCard({
   const display =
     candidate.matchedItemName ?? candidate.extractedName ?? "이름 미확인";
   const showSlotPicker = decided === "PENDING" || decided !== "REJECTED";
+  const showAmountPicker = decided !== "REJECTED";
 
   return (
     <View
@@ -393,6 +477,34 @@ function CandidateCard({
           )}
         </View>
       </View>
+
+      {showAmountPicker && (
+        <View style={styles.amountBox}>
+          <AppText type="pretendard-b" style={styles.amountTitle}>
+            잔여분 / 총량
+          </AppText>
+          <View style={styles.amountRow}>
+            <AmountField
+              label="잔여"
+              value={amount.remaining}
+              onChange={(v) => onChangeAmount("remaining", v)}
+              editable={decided === "PENDING"}
+            />
+            <AppText type="pretendard-m" style={styles.amountSlash}>
+              /
+            </AppText>
+            <AmountField
+              label="총량"
+              value={amount.total}
+              onChange={(v) => onChangeAmount("total", v)}
+              editable={decided === "PENDING"}
+            />
+            <AppText type="pretendard-m" style={styles.amountUnit}>
+              정
+            </AppText>
+          </View>
+        </View>
+      )}
 
       {showSlotPicker && decided !== "REJECTED" && (
         <View style={styles.slotPickerBox}>
@@ -510,6 +622,37 @@ function CandidateCard({
   );
 }
 
+function AmountField({
+  label,
+  value,
+  onChange,
+  editable,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  editable: boolean;
+}) {
+  return (
+    <View style={styles.amountField}>
+      <AppText type="pretendard-r" style={styles.amountFieldLabel}>
+        {label}
+      </AppText>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        editable={editable}
+        keyboardType="number-pad"
+        maxLength={4}
+        style={[
+          styles.amountInput,
+          !editable && { backgroundColor: "#F4F2EA", color: "#888" },
+        ]}
+      />
+    </View>
+  );
+}
+
 function DecisionBadge({ decision }: { decision: CaregiverDecision }) {
   const meta = (() => {
     if (decision === "ACCEPTED")
@@ -620,6 +763,52 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#999",
     marginTop: 2,
+  },
+
+  /* 잔여분 입력 */
+  amountBox: {
+    gap: 6,
+  },
+  amountTitle: {
+    fontSize: 12,
+    color: "#444",
+  },
+  amountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  amountField: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  amountFieldLabel: {
+    fontSize: 12,
+    color: "#666",
+  },
+  amountInput: {
+    flex: 1,
+    height: 36,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    fontFamily: "Pretendard-Bold",
+    color: "#222",
+    backgroundColor: "#FAFAF6",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+    borderRadius: 8,
+    textAlign: "center",
+  },
+  amountSlash: {
+    fontSize: 16,
+    color: "#999",
+  },
+  amountUnit: {
+    fontSize: 12,
+    color: "#666",
+    marginLeft: -2,
   },
 
   /* 슬롯 선택 */
