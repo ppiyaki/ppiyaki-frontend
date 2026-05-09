@@ -3,7 +3,7 @@ import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
 import { signupLocal } from "@/services/auth";
-import { resolveAuthRoute, ROUTE_PATHS } from "@/services/post-login";
+import { ROUTE_PATHS } from "@/services/post-login";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -43,18 +43,9 @@ export default function FamilySignupScreen() {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      const { isOnboarded } = await signupLocal(
-        trimmedId,
-        password,
-        trimmedNick,
-      );
-      // 가입 성공 — isOnboarded=true면 family로, 아니면 온보딩으로
-      if (!isOnboarded) {
-        router.replace(ROUTE_PATHS.onboarding as any);
-        return;
-      }
-      const route = await resolveAuthRoute();
-      router.replace(ROUTE_PATHS[route] as any);
+      await signupLocal(trimmedId, password, trimmedNick);
+      // 카카오/로컬 모두 4단계 온보딩으로 이동
+      router.replace(ROUTE_PATHS.onboarding as any);
     } catch (e) {
       const msg =
         e instanceof ApiError && e.status === 409

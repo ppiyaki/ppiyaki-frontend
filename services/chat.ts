@@ -30,11 +30,9 @@ interface SseHandlers {
  * SSE 응답 파싱 — `data: ...` 라인에서 chunk 추출하고 [DONE]에서 종료.
  * 각 chunk를 onChunk로 전달.
  *
- * 백엔드는 OpenAI streaming 형식을 사용한다:
- *  - "data:" 직후 공백은 SSE 표준 prefix가 아니라 콘텐츠 공백
- *  - 단어 시작 토큰 = `data: 더` (앞 공백 포함)
- *  - 단어 중간 토큰 = `data:죄` (공백 없음)
- *  - 따라서 콜론 다음 콘텐츠를 그대로 전달해야 띄어쓰기가 보존된다.
+ * 백엔드 포맷:
+ *  - 텍스트 응답: 평문 토큰 (`data: 더`, `data:죄`) — 콜론 다음 공백이 콘텐츠라 그대로 전달
+ *  - 음성 응답: JSON (`data:{"text":"...","audio":"<base64>"}`) — text 만 추출, audio는 버림
  */
 function parseSseChunks(text: string, handlers: SseHandlers): boolean {
   let done = false;
@@ -47,6 +45,20 @@ function parseSseChunks(text: string, handlers: SseHandlers): boolean {
       break;
     }
     if (trimmed === "") continue;
+
+    // JSON 페이로드 (음성 응답) — text 만 뽑고 audio 등 부가 필드는 무시
+    if (trimmed.startsWith("{")) {
+      try {
+        const obj = JSON.parse(trimmed) as { text?: unknown };
+        if (typeof obj.text === "string" && obj.text.length > 0) {
+          handlers.onChunk(obj.text);
+        }
+        continue;
+      } catch {
+        // JSON 파싱 실패 시 평문 폴백
+      }
+    }
+
     handlers.onChunk(data);
   }
   return done;

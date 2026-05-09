@@ -113,40 +113,63 @@ export default function ChatScreen() {
     })();
   }, [sessionId]);
 
-  const buildAiHandlers = (aiId: string) => ({
-    onChunk: (chunk: string) => {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === aiId && m.role === "ai" ? { ...m, text: m.text + chunk } : m,
-        ),
-      );
-    },
-    onDone: () => {
-      setStreaming(false);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === aiId && m.role === "ai" && !m.text
-            ? { ...m, text: "응답을 받지 못했어요. 다시 시도해주세요." }
-            : m,
-        ),
-      );
-    },
-    onError: (err: Error) => {
-      console.log("[chat] stream error:", err);
-      const fallback =
-        err.message && err.message.length > 0
-          ? `응답을 받지 못했어요\n(${err.message})`
-          : "응답을 받지 못했어요. 다시 시도해주세요.";
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === aiId && m.role === "ai"
-            ? { ...m, text: m.text || fallback }
-            : m,
-        ),
-      );
-      setStreaming(false);
-    },
-  });
+  const speakText = (msgId: string, text: string) => {
+    if (!text) return;
+    void Speech.stop();
+    setSpeakingId(msgId);
+    Speech.speak(text, {
+      language: "ko-KR",
+      rate: 0.95,
+      onDone: () => setSpeakingId((cur) => (cur === msgId ? null : cur)),
+      onStopped: () => setSpeakingId((cur) => (cur === msgId ? null : cur)),
+      onError: () => setSpeakingId((cur) => (cur === msgId ? null : cur)),
+    });
+  };
+
+  const buildAiHandlers = (aiId: string) => {
+    let accumulated = "";
+    return {
+      onChunk: (chunk: string) => {
+        accumulated += chunk;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiId && m.role === "ai"
+              ? { ...m, text: m.text + chunk }
+              : m,
+          ),
+        );
+      },
+      onDone: () => {
+        setStreaming(false);
+        if (accumulated.length === 0) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiId && m.role === "ai" && !m.text
+                ? { ...m, text: "응답을 받지 못했어요. 다시 시도해주세요." }
+                : m,
+            ),
+          );
+          return;
+        }
+        speakText(aiId, accumulated);
+      },
+      onError: (err: Error) => {
+        console.log("[chat] stream error:", err);
+        const fallback =
+          err.message && err.message.length > 0
+            ? `응답을 받지 못했어요\n(${err.message})`
+            : "응답을 받지 못했어요. 다시 시도해주세요.";
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiId && m.role === "ai"
+              ? { ...m, text: m.text || fallback }
+              : m,
+          ),
+        );
+        setStreaming(false);
+      },
+    };
+  };
 
   const inferPhotoMime = (uri: string): string => {
     const lower = uri.toLowerCase();
@@ -289,15 +312,7 @@ export default function ChatScreen() {
       setSpeakingId(null);
       return;
     }
-    void Speech.stop();
-    setSpeakingId(msgId);
-    Speech.speak(text, {
-      language: "ko-KR",
-      rate: 0.95,
-      onDone: () => setSpeakingId((cur) => (cur === msgId ? null : cur)),
-      onStopped: () => setSpeakingId((cur) => (cur === msgId ? null : cur)),
-      onError: () => setSpeakingId((cur) => (cur === msgId ? null : cur)),
-    });
+    speakText(msgId, text);
   };
 
   const openCamera = async () => {
