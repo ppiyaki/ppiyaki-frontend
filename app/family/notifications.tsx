@@ -1,8 +1,12 @@
 import AppText from "@/components/app-text";
 import { ApiError } from "@/services/api";
-import { resolveSeniorId } from "@/services/caregivers";
-import { listMedicationLogs } from "@/services/medication-logs";
-import { listPrescriptions } from "@/services/prescriptions";
+import {
+  NotificationCategory,
+  NotificationItem,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "@/services/notifications";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ComponentProps, useCallback, useState } from "react";
@@ -23,108 +27,78 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "done", label: "복약 완료" },
 ];
 
-type NotifKind = "warning" | "celebrate" | "delay";
-
-interface NotifItem {
-  id: string;
-  kind: NotifKind;
-  title: string;
-  time: string;
-  date: string;
-  onPress?: () => void;
-}
+const WARNING_CATEGORIES: NotificationCategory[] = [
+  "MEDICATION_DELAY",
+  "DUR_WARNING",
+  "FAMILY_SAFETY",
+];
+const DONE_CATEGORIES: NotificationCategory[] = ["MEDICATION_COMPLETE"];
 
 interface DateGroup {
   date: string;
-  items: NotifItem[];
+  items: NotificationItem[];
 }
+
+type IconMeta = {
+  family: "ionicons" | "material";
+  name:
+    | ComponentProps<typeof Ionicons>["name"]
+    | ComponentProps<typeof MaterialCommunityIcons>["name"];
+  color: string;
+  bg: string;
+};
+
+const ICON_META: Record<NotificationCategory, IconMeta> = {
+  MEDICATION_REMINDER: {
+    family: "material",
+    name: "pill",
+    color: "#F8B835",
+    bg: "#FFF1C8",
+  },
+  MEDICATION_DELAY: {
+    family: "ionicons",
+    name: "alarm",
+    color: "#E14B4B",
+    bg: "#FCE4E4",
+  },
+  DUR_WARNING: {
+    family: "ionicons",
+    name: "warning",
+    color: "#F8B835",
+    bg: "#FFF4C7",
+  },
+  FAMILY_SAFETY: {
+    family: "ionicons",
+    name: "people",
+    color: "#4799E0",
+    bg: "#DDEBF8",
+  },
+  MEDICATION_COMPLETE: {
+    family: "ionicons",
+    name: "happy-outline",
+    color: "#5BC4AE",
+    bg: "#D6F1EA",
+  },
+};
 
 export default function FamilyNotificationsScreen() {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [groups, setGroups] = useState<DateGroup[]>([]);
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const items: NotifItem[] = [];
-
-      // 1) 연결된 시니어 ID — listPrescriptions / listMedicationLogs 모두 v0.9.2 이후 seniorId 필수
-      const seniorId = await resolveSeniorId();
-
-      // 2) 처방전 검토 대기 → warning
-      try {
-        const pres = await listPrescriptions("PENDING_REVIEW", seniorId);
-        for (const p of pres.responses) {
-          items.push({
-            id: `pres-${p.id}`,
-            kind: "warning",
-            title: `검토 대기 중인 처방전이 있어요\n어르신이 등록한 처방전을 확인해주세요`,
-            time: formatTime(p.createdAt),
-            date: formatDateLabel(p.createdAt),
-            onPress: () => router.push("/family/prescriptions" as any),
-          });
-        }
-      } catch (e) {
-        console.log("[notif] prescriptions failed:", e);
-      }
-
-      // 3) 최근 7일 복약 기록 → 누락은 delay, 완료는 celebrate
-      try {
-        const today = new Date();
-        const weekAgo = new Date(today);
-        weekAgo.setDate(today.getDate() - 6);
-        const logs = await listMedicationLogs({
-          from: toIsoDate(weekAgo),
-          to: toIsoDate(today),
-          seniorId,
-        });
-
-        for (const log of logs.responses) {
-          const baseTime = log.takenAt ?? log.createdAt;
-          if (log.status === "MISSED") {
-            items.push({
-              id: `log-miss-${log.id}`,
-              kind: "delay",
-              title: `복약 시간을 놓쳤어요\n시간을 다시 확인해주세요`,
-              time: formatTime(baseTime),
-              date: formatDateLabel(baseTime),
-            });
-          } else if (
-            log.status === "TAKEN" &&
-            log.aiStatus === "COUNT_MATCH"
-          ) {
-            items.push({
-              id: `log-done-${log.id}`,
-              kind: "celebrate",
-              title: `어르신이 복약을 완료하셨어요!`,
-              time: formatTime(baseTime),
-              date: formatDateLabel(baseTime),
-            });
-          } else if (
-            log.status === "TAKEN" &&
-            log.aiStatus === "COUNT_MISMATCH"
-          ) {
-            items.push({
-              id: `log-mismatch-${log.id}`,
-              kind: "warning",
-              title: `복약 인증 사진의 개수가 달라요\n확인이 필요해요`,
-              time: formatTime(baseTime),
-              date: formatDateLabel(baseTime),
-            });
-          }
-        }
-      } catch (e) {
-        console.log("[notif] logs failed:", e);
-      }
-
-      // 시간 역순 정렬 → 날짜 그룹화
-      items.sort((a, b) => (a.date < b.date ? 1 : -1));
-      const grouped = groupByDate(items);
-      setGroups(grouped);
+      const res = await listNotifications({ size: 50 });
+      setItems(res.responses);
+      setCursor(res.nextCursor);
+      setHasNext(res.hasNext);
     } catch (e) {
       setError(
         e instanceof ApiError
@@ -134,7 +108,7 @@ export default function FamilyNotificationsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -142,24 +116,68 @@ export default function FamilyNotificationsScreen() {
     }, [load]),
   );
 
-  const visibleGroups = groups
-    .map((g) => ({
-      ...g,
-      items: g.items.filter((it) => matchesFilter(it, filter)),
-    }))
-    .filter((g) => g.items.length > 0);
+  const loadMore = async () => {
+    if (!hasNext || cursor == null || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await listNotifications({ size: 50, cursor });
+      setItems((prev) => [...prev, ...res.responses]);
+      setCursor(res.nextCursor);
+      setHasNext(res.hasNext);
+    } catch (e) {
+      console.log("[notif] load more failed:", e);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const markRead = async (id: number) => {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === id ? { ...it, isRead: true, readAt: new Date().toISOString() } : it,
+      ),
+    );
+    try {
+      await markNotificationRead(id);
+    } catch (e) {
+      console.log("[notif] mark read failed:", e);
+    }
+  };
+
+  const markAllRead = async () => {
+    const now = new Date().toISOString();
+    setItems((prev) => prev.map((it) => ({ ...it, isRead: true, readAt: now })));
+    try {
+      await markAllNotificationsRead();
+    } catch (e) {
+      console.log("[notif] mark all read failed:", e);
+    }
+  };
+
+  const filtered = items.filter((it) => matchesFilter(it.category, filter));
+  const groups = groupByDate(filtered);
+  const hasUnread = items.some((it) => !it.isRead);
+
+  const handleNotifPress = (item: NotificationItem) => {
+    if (!item.isRead) void markRead(item.id);
+    if (item.category === "DUR_WARNING" || item.category === "MEDICATION_DELAY") {
+      router.push("/family/prescriptions" as any);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      {/* 헤더 */}
       <View style={styles.header}>
         <AppText type="pretendard-b" style={styles.headerTitle}>
           알림
         </AppText>
         <Pressable
+          onPress={markAllRead}
+          disabled={!hasUnread}
           style={({ pressed }) => [
             styles.markBtn,
-            pressed && { backgroundColor: "#D6F1EA" },
+            !hasUnread && { opacity: 0.5 },
+            pressed && hasUnread && { backgroundColor: "#D6F1EA" },
           ]}
         >
           <AppText
@@ -172,7 +190,6 @@ export default function FamilyNotificationsScreen() {
         </Pressable>
       </View>
 
-      {/* 필터 */}
       <View style={styles.filters}>
         {FILTERS.map((f) => (
           <Pressable
@@ -201,24 +218,24 @@ export default function FamilyNotificationsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {loading && (
-          <View style={styles.loadingBox}>
+          <View style={styles.stateBox}>
             <ActivityIndicator size="large" color="#FFD24D" />
           </View>
         )}
 
         {!loading && error && (
-          <View style={styles.emptyBox}>
+          <View style={styles.stateBox}>
             <Ionicons name="alert-circle" size={28} color="#E14B4B" />
-            <AppText type="pretendard-m" style={styles.emptyText}>
+            <AppText type="pretendard-m" style={styles.stateText}>
               {error}
             </AppText>
           </View>
         )}
 
-        {!loading && !error && visibleGroups.length === 0 && (
-          <View style={styles.emptyBox}>
+        {!loading && !error && groups.length === 0 && (
+          <View style={styles.stateBox}>
             <Ionicons name="notifications-off" size={32} color="#BBB" />
-            <AppText type="pretendard-m" style={styles.emptyText}>
+            <AppText type="pretendard-m" style={styles.stateText}>
               새 알림이 없어요
             </AppText>
           </View>
@@ -226,28 +243,58 @@ export default function FamilyNotificationsScreen() {
 
         {!loading &&
           !error &&
-          visibleGroups.map((g) => (
+          groups.map((g) => (
             <View key={g.date} style={styles.group}>
               <AppText type="pretendard-b" style={styles.groupDate}>
-                {g.date}
+                {formatDateLabel(g.date)}
               </AppText>
               {g.items.map((it) => (
-                <NotifCard key={it.id} item={it} />
+                <NotifCard
+                  key={it.id}
+                  item={it}
+                  onPress={() => handleNotifPress(it)}
+                />
               ))}
             </View>
           ))}
+
+        {!loading && !error && hasNext && (
+          <Pressable
+            onPress={loadMore}
+            disabled={loadingMore}
+            style={({ pressed }) => [
+              styles.moreBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            {loadingMore ? (
+              <ActivityIndicator size="small" color="#5BC4AE" />
+            ) : (
+              <AppText type="pretendard-b" style={styles.moreBtnText}>
+                더 보기
+              </AppText>
+            )}
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function NotifCard({ item }: { item: NotifItem }) {
-  const meta = ICON_META[item.kind];
+function NotifCard({
+  item,
+  onPress,
+}: {
+  item: NotificationItem;
+  onPress: () => void;
+}) {
+  const meta = ICON_META[item.category];
   return (
     <Pressable
-      onPress={item.onPress}
+      onPress={onPress}
       style={({ pressed }) => [
         styles.card,
+        !item.isRead && styles.cardUnread,
         pressed && { backgroundColor: "#FBF7EC" },
       ]}
     >
@@ -259,73 +306,56 @@ function NotifCard({ item }: { item: NotifItem }) {
             color={meta.color}
           />
         ) : (
-          <MaterialCommunityIcons name="pill" size={22} color={meta.color} />
+          <MaterialCommunityIcons
+            name={meta.name as ComponentProps<typeof MaterialCommunityIcons>["name"]}
+            size={22}
+            color={meta.color}
+          />
         )}
       </View>
-      <AppText type="pretendard-m" style={styles.cardTitle} numberOfLines={2}>
-        {item.title}
-      </AppText>
+      <View style={{ flex: 1, gap: 2 }}>
+        <AppText type="pretendard-b" style={styles.cardTitle} numberOfLines={2}>
+          {item.title}
+        </AppText>
+        {!!item.body && (
+          <AppText
+            type="pretendard-r"
+            style={styles.cardBody}
+            numberOfLines={2}
+          >
+            {item.body}
+          </AppText>
+        )}
+      </View>
       <View style={styles.cardRight}>
         <AppText type="pretendard-m" style={styles.cardTime}>
-          {item.time}
+          {formatTime(item.createdAt)}
         </AppText>
-        {item.onPress && (
-          <Ionicons name="chevron-forward" size={16} color="#5BC4AE" />
-        )}
+        {!item.isRead && <View style={styles.unreadDot} />}
       </View>
     </Pressable>
   );
 }
 
-const ICON_META: Record<
-  NotifKind,
-  {
-    name: ComponentProps<typeof Ionicons>["name"] | "pill";
-    family: "ionicons" | "material";
-    color: string;
-    bg: string;
-  }
-> = {
-  warning: {
-    name: "warning",
-    family: "ionicons",
-    color: "#F8B835",
-    bg: "#FFF4C7",
-  },
-  celebrate: {
-    name: "happy-outline",
-    family: "ionicons",
-    color: "#5BC4AE",
-    bg: "#D6F1EA",
-  },
-  delay: {
-    name: "pill",
-    family: "material",
-    color: "#F8B835",
-    bg: "#FFF1C8",
-  },
-};
-
-function matchesFilter(item: NotifItem, filter: FilterKey): boolean {
+function matchesFilter(
+  category: NotificationCategory,
+  filter: FilterKey,
+): boolean {
   if (filter === "all") return true;
-  if (filter === "warning")
-    return item.kind === "warning" || item.kind === "delay";
-  if (filter === "done") return item.kind === "celebrate";
+  if (filter === "warning") return WARNING_CATEGORIES.includes(category);
+  if (filter === "done") return DONE_CATEGORIES.includes(category);
   return true;
 }
 
-function groupByDate(items: NotifItem[]): DateGroup[] {
-  const map = new Map<string, NotifItem[]>();
+function groupByDate(items: NotificationItem[]): DateGroup[] {
+  const map = new Map<string, NotificationItem[]>();
   for (const it of items) {
-    const arr = map.get(it.date) ?? [];
+    const date = it.createdAt.slice(0, 10);
+    const arr = map.get(date) ?? [];
     arr.push(it);
-    map.set(it.date, arr);
+    map.set(date, arr);
   }
   return Array.from(map.entries()).map(([date, items]) => ({ date, items }));
-}
-
-function toIsoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
 }
 
 function formatDateLabel(iso: string): string {
@@ -390,9 +420,8 @@ const styles = StyleSheet.create({
   filterTextOn: { color: "#222" },
 
   scroll: { paddingHorizontal: 16, paddingBottom: 24, gap: 18 },
-  loadingBox: { paddingVertical: 60, alignItems: "center" },
-  emptyBox: { paddingVertical: 60, alignItems: "center", gap: 8 },
-  emptyText: { fontSize: 14, color: "#888" },
+  stateBox: { paddingVertical: 60, alignItems: "center", gap: 8 },
+  stateText: { fontSize: 14, color: "#888" },
 
   group: { gap: 8 },
   groupDate: { fontSize: 15, color: "#222", paddingHorizontal: 4 },
@@ -407,6 +436,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1ECDB",
   },
+  cardUnread: {
+    backgroundColor: "#FFFCEF",
+    borderColor: "#FFD24D",
+  },
   cardIcon: {
     width: 44,
     height: 44,
@@ -415,11 +448,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cardTitle: {
-    flex: 1,
     fontSize: 14,
     color: "#222",
     lineHeight: 20,
   },
-  cardRight: { flexDirection: "row", alignItems: "center", gap: 4 },
+  cardBody: {
+    fontSize: 12,
+    color: "#777",
+    lineHeight: 18,
+  },
+  cardRight: {
+    alignItems: "flex-end",
+    gap: 4,
+  },
   cardTime: { fontSize: 12, color: "#777" },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FFD24D",
+  },
+
+  moreBtn: {
+    alignSelf: "center",
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#BDEFEA",
+    backgroundColor: "#FFF",
+  },
+  moreBtnText: { fontSize: 14, color: "#5BC4AE" },
 });

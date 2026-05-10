@@ -1,11 +1,20 @@
 import AnimatedToggle from "@/components/animated-toggle";
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { ComponentProps, useState } from "react";
+import { ApiError } from "@/services/api";
+import type { CareMode } from "@/services/auth";
+import { LinkedSenior, listLinkedSeniors } from "@/services/caregivers";
 import {
+  NotificationSettings,
+  applyNotificationPreset,
+  getNotificationSettings,
+  updateNotificationSettings,
+} from "@/services/notification-settings";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { ComponentProps, useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
   Image,
-  ImageSourcePropType,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,51 +22,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-interface Senior {
-  id: string;
-  name: string;
-  image: ImageSourcePropType;
-}
-
-interface SeniorSettings {
-  doseConfirm: boolean;
-  warning: boolean;
-  reportDaily: boolean;
-  reportWeekly: boolean;
-  reportMonthly: boolean;
-}
-
-const SENIORS: Senior[] = [
-  {
-    id: "1",
-    name: "김장군",
-    image: require("../../assets/images/pf/pfimg2.png"),
-  },
-  {
-    id: "2",
-    name: "김명군",
-    image: require("../../assets/images/pf/pfimg3.png"),
-  },
-  {
-    id: "3",
-    name: "김대군",
-    image: require("../../assets/images/pf/pfimg4.png"),
-  },
-];
-
-const DEFAULT_SETTINGS: SeniorSettings = {
-  doseConfirm: true,
-  warning: true,
-  reportDaily: true,
-  reportWeekly: false,
-  reportMonthly: true,
-};
-
-interface SettingRow {
-  key: keyof SeniorSettings;
-  label: string;
-  description: string;
-}
+const FALLBACK_IMG = require("../../assets/images/pf/pfimg2.png");
 
 type IconSpec =
   | {
@@ -69,73 +34,163 @@ type IconSpec =
       name: ComponentProps<typeof MaterialCommunityIcons>["name"];
     };
 
+interface ToggleRow {
+  key:
+    | "durWarningEnabled"
+    | "medicationDelayEnabled"
+    | "familySafetyEnabled"
+    | "medicationCompleteEnabled";
+  label: string;
+  description: string;
+}
+
 interface SettingGroup {
   title: string;
   icon: IconSpec;
   iconColor: string;
   iconBg: string;
-  rows: SettingRow[];
+  rows: ToggleRow[];
 }
 
 const SETTING_GROUPS: SettingGroup[] = [
   {
-    title: "복약 인증 알림",
+    title: "복약 알림",
     icon: { family: "material", name: "pill" },
     iconColor: "#F8B835",
     iconBg: "#FFF1C8",
     rows: [
       {
-        key: "doseConfirm",
-        label: "복약 확인 알림",
-        description: "시니어가 복약 인증을 완료하면 알림이 와요",
+        key: "medicationDelayEnabled",
+        label: "미복약/지연 알림",
+        description: "임계 시간 안에 복약 인증이 없으면 알림을 받아요",
       },
       {
-        key: "warning",
-        label: "경고 알림",
-        description: "복약 인증이 지연되거나 누락되면 알림이 와요",
+        key: "medicationCompleteEnabled",
+        label: "복약 완료 축하 알림",
+        description: "어르신이 복약을 완료하면 알림이 와요",
+      },
+      {
+        key: "durWarningEnabled",
+        label: "DUR 위험 알림",
+        description: "약물 상호작용·중복 위험이 발견되면 알림을 받아요",
       },
     ],
   },
   {
-    title: "리포트 알림",
-    icon: { family: "ionicons", name: "document-text-outline" },
-    iconColor: "#5BC4AE",
-    iconBg: "#D6F1EA",
+    title: "가족 안전망",
+    icon: { family: "ionicons", name: "people" },
+    iconColor: "#4799E0",
+    iconBg: "#DDEBF8",
     rows: [
       {
-        key: "reportDaily",
-        label: "일간 리포트 알림",
-        description: "매일 저녁 하루 복약 요약을 받아요",
-      },
-      {
-        key: "reportWeekly",
-        label: "주간 리포트 알림",
-        description: "매주 일요일 한 주 복약 요약을 받아요",
-      },
-      {
-        key: "reportMonthly",
-        label: "월간 리포트 알림",
-        description: "매달 1일 지난달 복약 요약을 받아요",
+        key: "familySafetyEnabled",
+        label: "앱 미접속 알림",
+        description: "어르신이 일정 시간 앱을 안 켜시면 알림을 받아요",
       },
     ],
   },
 ];
 
 export default function MonitoringSettingsScreen() {
-  const [selectedId, setSelectedId] = useState(SENIORS[0].id);
-  const [allSettings, setAllSettings] = useState<
-    Record<string, SeniorSettings>
-  >(() =>
-    Object.fromEntries(SENIORS.map((s) => [s.id, { ...DEFAULT_SETTINGS }])),
-  );
+  const [seniors, setSeniors] = useState<LinkedSenior[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const settings = allSettings[selectedId];
+  // 시니어 목록 로드
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await listLinkedSeniors();
+        setSeniors(res.responses);
+        if (res.responses[0]) setSelectedId(res.responses[0].id);
+      } catch (e) {
+        console.log("[monitoring] listLinkedSeniors failed:", e);
+        setError("시니어 정보를 불러오지 못했어요");
+        setLoading(false);
+      }
+    })();
+  }, []);
 
-  const toggle = (key: keyof SeniorSettings) => {
-    setAllSettings((prev) => ({
-      ...prev,
-      [selectedId]: { ...prev[selectedId], [key]: !prev[selectedId][key] },
-    }));
+  // 선택된 시니어 알림 설정 로드
+  const loadSettings = useCallback(async (seniorId: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const s = await getNotificationSettings(seniorId);
+      setSettings(s);
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? e.toUserMessage()
+          : "알림 설정을 불러오지 못했어요",
+      );
+      setSettings(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedId == null) return;
+    void loadSettings(selectedId);
+  }, [selectedId, loadSettings]);
+
+  const persistFull = async (next: NotificationSettings) => {
+    if (selectedId == null) return;
+    setSaving(true);
+    try {
+      const updated = await updateNotificationSettings(selectedId, {
+        durWarningEnabled: next.durWarningEnabled,
+        medicationDelayEnabled: next.medicationDelayEnabled,
+        medicationDelayThresholdMinutes: next.medicationDelayThresholdMinutes,
+        familySafetyEnabled: next.familySafetyEnabled,
+        familySafetyThresholdHours: next.familySafetyThresholdHours,
+        medicationCompleteEnabled: next.medicationCompleteEnabled,
+      });
+      setSettings(updated);
+    } catch (e) {
+      console.log("[monitoring] update failed:", e);
+      // 실패 시 원복
+      if (selectedId != null) void loadSettings(selectedId);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleField = (key: ToggleRow["key"]) => {
+    if (!settings) return;
+    const next = { ...settings, [key]: !settings[key] };
+    setSettings(next);
+    void persistFull(next);
+  };
+
+  const adjustThreshold = (
+    key: "medicationDelayThresholdMinutes" | "familySafetyThresholdHours",
+    delta: number,
+  ) => {
+    if (!settings) return;
+    const next = {
+      ...settings,
+      [key]: Math.max(1, settings[key] + delta),
+    };
+    setSettings(next);
+    void persistFull(next);
+  };
+
+  const applyPreset = async (careMode: CareMode) => {
+    if (selectedId == null) return;
+    setSaving(true);
+    try {
+      const updated = await applyNotificationPreset(selectedId, careMode);
+      setSettings(updated);
+    } catch (e) {
+      console.log("[monitoring] preset apply failed:", e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -150,98 +205,258 @@ export default function MonitoringSettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* 시니어 선택 */}
-        <View style={styles.section}>
-          <AppText type="pretendard-b" style={styles.sectionTitle}>
-            관리 중인 시니어 계정
-          </AppText>
-          <View style={styles.seniorRow}>
-            {SENIORS.map((senior) => {
-              const on = senior.id === selectedId;
-              return (
-                <Pressable
-                  key={senior.id}
-                  onPress={() => setSelectedId(senior.id)}
-                  style={[styles.seniorCard, on && styles.seniorCardOn]}
-                >
-                  <View style={styles.seniorAvatar}>
-                    <Image
-                      source={senior.image}
-                      style={styles.seniorImg}
-                      resizeMode="cover"
-                    />
-                  </View>
-                  <AppText
-                    type="pretendard-b"
-                    style={[styles.seniorName, on && styles.seniorNameOn]}
+        {seniors.length > 0 && (
+          <View style={styles.section}>
+            <AppText type="pretendard-b" style={styles.sectionTitle}>
+              관리 중인 시니어
+            </AppText>
+            <View style={styles.seniorRow}>
+              {seniors.map((senior) => {
+                const on = senior.id === selectedId;
+                return (
+                  <Pressable
+                    key={senior.id}
+                    onPress={() => setSelectedId(senior.id)}
+                    style={[styles.seniorCard, on && styles.seniorCardOn]}
                   >
-                    {senior.name}
-                  </AppText>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* 세부 설정 (그룹별) */}
-        {SETTING_GROUPS.map((group) => (
-          <View key={group.title} style={styles.section}>
-            <View style={styles.groupTitleRow}>
-              <View
-                style={[styles.groupIcon, { backgroundColor: group.iconBg }]}
-              >
-                {group.icon.family === "material" ? (
-                  <MaterialCommunityIcons
-                    name={group.icon.name}
-                    size={16}
-                    color={group.iconColor}
-                  />
-                ) : (
-                  <Ionicons
-                    name={group.icon.name}
-                    size={16}
-                    color={group.iconColor}
-                  />
-                )}
-              </View>
-              <AppText type="pretendard-b" style={styles.sectionTitle}>
-                {group.title}
-              </AppText>
+                    <View style={styles.seniorAvatar}>
+                      <Image
+                        source={FALLBACK_IMG}
+                        style={styles.seniorImg}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    <AppText
+                      type="pretendard-b"
+                      style={[styles.seniorName, on && styles.seniorNameOn]}
+                    >
+                      {senior.nickname}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
             </View>
-            <View style={styles.settingsCard}>
-              {group.rows.map((row, idx) => (
-                <View
-                  key={row.key}
-                  style={[
-                    styles.settingRow,
-                    idx < group.rows.length - 1 && styles.settingRowDivider,
+          </View>
+        )}
+
+        {loading && (
+          <View style={styles.stateBox}>
+            <ActivityIndicator size="large" color="#FFD24D" />
+          </View>
+        )}
+
+        {!loading && error && (
+          <View style={styles.stateBox}>
+            <Ionicons name="alert-circle" size={28} color="#E14B4B" />
+            <AppText type="pretendard-m" style={styles.stateText}>
+              {error}
+            </AppText>
+          </View>
+        )}
+
+        {!loading && !error && settings && (
+          <>
+            {/* 프리셋 적용 */}
+            <View style={styles.section}>
+              <AppText type="pretendard-b" style={styles.sectionTitle}>
+                간편 모드 선택
+              </AppText>
+              <View style={styles.presetRow}>
+                <Pressable
+                  onPress={() => applyPreset("AUTONOMOUS")}
+                  disabled={saving}
+                  style={({ pressed }) => [
+                    styles.presetBtn,
+                    pressed && { opacity: 0.85 },
                   ]}
                 >
-                  <View style={styles.settingText}>
-                    <AppText type="pretendard-b" style={styles.settingLabel}>
-                      {row.label}
+                  <Ionicons name="leaf" size={18} color="#5BC4AE" />
+                  <View style={styles.presetText}>
+                    <AppText type="pretendard-b" style={styles.presetTitle}>
+                      기본 건강 알림
                     </AppText>
-                    <AppText type="pretendard-m" style={styles.settingDesc}>
-                      {row.description}
+                    <AppText type="pretendard-r" style={styles.presetDesc}>
+                      지연 60분 / 미접속 48시간
                     </AppText>
                   </View>
-                  <AnimatedToggle
-                    value={settings[row.key]}
-                    onChange={() => toggle(row.key)}
-                  />
-                </View>
-              ))}
+                </Pressable>
+                <Pressable
+                  onPress={() => applyPreset("MANAGED")}
+                  disabled={saving}
+                  style={({ pressed }) => [
+                    styles.presetBtn,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Ionicons name="shield-checkmark" size={18} color="#F8B835" />
+                  <View style={styles.presetText}>
+                    <AppText type="pretendard-b" style={styles.presetTitle}>
+                      집중 안심 모드
+                    </AppText>
+                    <AppText type="pretendard-r" style={styles.presetDesc}>
+                      지연 30분 / 미접속 12시간
+                    </AppText>
+                  </View>
+                </Pressable>
+              </View>
             </View>
-          </View>
-        ))}
 
-        <View style={styles.note}>
-          <Ionicons name="information-circle" size={16} color="#888" />
-          <AppText type="pretendard-m" style={styles.noteText}>
-            설정 변경 사항은 자동으로 저장돼요
-          </AppText>
-        </View>
+            {/* 세부 토글 */}
+            {SETTING_GROUPS.map((group) => (
+              <View key={group.title} style={styles.section}>
+                <View style={styles.groupTitleRow}>
+                  <View
+                    style={[styles.groupIcon, { backgroundColor: group.iconBg }]}
+                  >
+                    {group.icon.family === "material" ? (
+                      <MaterialCommunityIcons
+                        name={group.icon.name}
+                        size={16}
+                        color={group.iconColor}
+                      />
+                    ) : (
+                      <Ionicons
+                        name={group.icon.name}
+                        size={16}
+                        color={group.iconColor}
+                      />
+                    )}
+                  </View>
+                  <AppText type="pretendard-b" style={styles.sectionTitle}>
+                    {group.title}
+                  </AppText>
+                </View>
+                <View style={styles.settingsCard}>
+                  {group.rows.map((row, idx) => (
+                    <View
+                      key={row.key}
+                      style={[
+                        styles.settingRow,
+                        idx < group.rows.length - 1 && styles.settingRowDivider,
+                      ]}
+                    >
+                      <View style={styles.settingText}>
+                        <AppText
+                          type="pretendard-b"
+                          style={styles.settingLabel}
+                        >
+                          {row.label}
+                        </AppText>
+                        <AppText
+                          type="pretendard-m"
+                          style={styles.settingDesc}
+                        >
+                          {row.description}
+                        </AppText>
+                        {row.key === "medicationDelayEnabled" &&
+                          settings.medicationDelayEnabled && (
+                            <Stepper
+                              label="임계 시간"
+                              unit="분"
+                              value={settings.medicationDelayThresholdMinutes}
+                              onDecrement={() =>
+                                adjustThreshold(
+                                  "medicationDelayThresholdMinutes",
+                                  -5,
+                                )
+                              }
+                              onIncrement={() =>
+                                adjustThreshold(
+                                  "medicationDelayThresholdMinutes",
+                                  5,
+                                )
+                              }
+                            />
+                          )}
+                        {row.key === "familySafetyEnabled" &&
+                          settings.familySafetyEnabled && (
+                            <Stepper
+                              label="임계 시간"
+                              unit="시간"
+                              value={settings.familySafetyThresholdHours}
+                              onDecrement={() =>
+                                adjustThreshold(
+                                  "familySafetyThresholdHours",
+                                  -1,
+                                )
+                              }
+                              onIncrement={() =>
+                                adjustThreshold(
+                                  "familySafetyThresholdHours",
+                                  1,
+                                )
+                              }
+                            />
+                          )}
+                      </View>
+                      <AnimatedToggle
+                        value={settings[row.key]}
+                        onChange={() => toggleField(row.key)}
+                      />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+
+            <View style={styles.note}>
+              <Ionicons name="information-circle" size={16} color="#888" />
+              <AppText type="pretendard-m" style={styles.noteText}>
+                {saving
+                  ? "저장 중…"
+                  : "설정 변경 사항은 자동으로 저장돼요"}
+              </AppText>
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function Stepper({
+  label,
+  value,
+  unit,
+  onDecrement,
+  onIncrement,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  onDecrement: () => void;
+  onIncrement: () => void;
+}) {
+  return (
+    <View style={styles.stepper}>
+      <AppText type="pretendard-m" style={styles.stepperLabel}>
+        {label}
+      </AppText>
+      <Pressable
+        onPress={onDecrement}
+        disabled={value <= 1}
+        style={({ pressed }) => [
+          styles.stepperBtn,
+          value <= 1 && { opacity: 0.4 },
+          pressed && value > 1 && { opacity: 0.7 },
+        ]}
+      >
+        <Ionicons name="remove" size={16} color="#333" />
+      </Pressable>
+      <AppText type="pretendard-b" style={styles.stepperValue}>
+        {value}
+        {unit}
+      </AppText>
+      <Pressable
+        onPress={onIncrement}
+        style={({ pressed }) => [
+          styles.stepperBtn,
+          pressed && { opacity: 0.7 },
+        ]}
+      >
+        <Ionicons name="add" size={16} color="#333" />
+      </Pressable>
+    </View>
   );
 }
 
@@ -257,10 +472,7 @@ const styles = StyleSheet.create({
     gap: 22,
   },
 
-  /* ── 섹션 공통 ── */
-  section: {
-    gap: 12,
-  },
+  section: { gap: 12 },
   sectionTitle: {
     fontSize: 17,
     color: "#222",
@@ -280,11 +492,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  /* ── 시니어 선택 ── */
-  seniorRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  stateBox: { paddingVertical: 60, alignItems: "center", gap: 8 },
+  stateText: { fontSize: 14, color: "#888" },
+
+  /* 시니어 선택 */
+  seniorRow: { flexDirection: "row", gap: 10 },
   seniorCard: {
     flex: 1,
     alignItems: "center",
@@ -309,19 +521,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1ECDB",
   },
-  seniorImg: {
-    width: "100%",
-    height: "100%",
-  },
-  seniorName: {
-    fontSize: 15,
-    color: "#444",
-  },
-  seniorNameOn: {
-    color: "#222",
-  },
+  seniorImg: { width: "100%", height: "100%" },
+  seniorName: { fontSize: 15, color: "#444" },
+  seniorNameOn: { color: "#222" },
 
-  /* ── 세부 설정 카드 ── */
+  /* 프리셋 */
+  presetRow: { flexDirection: "row", gap: 10 },
+  presetBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+  },
+  presetText: { flex: 1, gap: 2 },
+  presetTitle: { fontSize: 14, color: "#222" },
+  presetDesc: { fontSize: 11, color: "#777" },
+
+  /* 설정 카드 */
   settingsCard: {
     backgroundColor: "#FFF",
     borderRadius: 22,
@@ -340,28 +562,39 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F1ECDB",
   },
-  settingText: {
-    flex: 1,
-    gap: 2,
+  settingText: { flex: 1, gap: 2 },
+  settingLabel: { fontSize: 16, color: "#222" },
+  settingDesc: { fontSize: 12, color: "#777" },
+
+  /* 임계값 stepper */
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
   },
-  settingLabel: {
-    fontSize: 16,
+  stepperLabel: { fontSize: 13, color: "#666" },
+  stepperBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F4F2EA",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  stepperValue: {
+    fontSize: 14,
     color: "#222",
-  },
-  settingDesc: {
-    fontSize: 12,
-    color: "#777",
+    minWidth: 50,
+    textAlign: "center",
   },
 
-  /* ── 안내 ── */
+  /* 안내 */
   note: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 4,
   },
-  noteText: {
-    fontSize: 12,
-    color: "#888",
-  },
+  noteText: { fontSize: 12, color: "#888" },
 });

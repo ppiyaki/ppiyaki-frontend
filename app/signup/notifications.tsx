@@ -9,7 +9,7 @@ import {
 } from "@/contexts/signup-context";
 import { ApiError } from "@/services/api";
 import {
-  NotificationMode,
+  CareMode as ApiCareMode,
   OnboardingSeniorInput,
   SeniorGender,
   onboardCaregiver,
@@ -32,8 +32,8 @@ function toApiGender(g: Gender): SeniorGender {
   return g === "남" ? "MALE" : "FEMALE";
 }
 
-function toApiNotificationMode(m: CareMode): NotificationMode {
-  return m === "intensive" ? "DETAILED_ALERT" : "BASIC_ALERT";
+function toApiCareMode(m: CareMode): ApiCareMode {
+  return m === "intensive" ? "MANAGED" : "AUTONOMOUS";
 }
 
 type ModeDef = {
@@ -99,7 +99,7 @@ export default function NotificationsScreen() {
         seniors: seniors.map<OnboardingSeniorInput>((s) => ({
           nickname: s.name.trim(),
           gender: toApiGender(s.gender),
-          notificationMode: toApiNotificationMode(careModes[s.id]),
+          careMode: toApiCareMode(careModes[s.id]),
         })),
       };
       const res = await onboardCaregiver(body);

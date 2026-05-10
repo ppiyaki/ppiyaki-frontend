@@ -1,4 +1,5 @@
 import { ConfirmProvider } from "@/contexts/confirm-context";
+import { setupPushAndRegister } from "@/services/push-notifications";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -32,6 +33,11 @@ export default function RootLayout() {
     }, CUSTOM_SPLASH_DURATION_MS);
 
     return () => clearTimeout(timer);
+  }, []);
+
+  // 부팅 시 1회 — 인증된 사용자면 FCM 토큰 등록 (idempotent reactivate)
+  useEffect(() => {
+    void setupPushAndRegister();
   }, []);
 
   const handleSplashLayout = useCallback(() => {

@@ -14,6 +14,7 @@
     },
     "android": {
       "package": "com.ppiyaki.app",
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -53,6 +54,12 @@
         "expo-audio",
         {
           "microphonePermission": "음성으로 삐약이와 대화하기 위해 마이크 권한이 필요합니다."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#FFD24D"
         }
       ]
     ],

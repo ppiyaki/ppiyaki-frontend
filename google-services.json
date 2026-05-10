@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "258181403222",
+    "project_id": "ppiyaki",
+    "storage_bucket": "ppiyaki.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:258181403222:android:3269ad8a7a81ad9f65e1f7",
+        "android_client_info": {
+          "package_name": "com.ppiyaki.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKV2wSMWIVxSa5zIaxRP0r0br1U1dnTas"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

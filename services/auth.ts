@@ -1,5 +1,6 @@
 import * as KakaoLogin from "@react-native-seoul/kakao-login";
 import { apiFetch } from "./api";
+import { tearDownPush } from "./push-notifications";
 import {
   clearTokens,
   getRefreshToken,
@@ -111,13 +112,13 @@ export async function signupLocal(
 
 /* ────────── 보호자 온보딩 ────────── */
 
-export type SeniorGender = "MALE" | "FEMALE";
-export type NotificationMode = "BASIC_ALERT" | "DETAILED_ALERT";
+export type SeniorGender = "MALE" | "FEMALE" | "UNKNOWN";
+export type CareMode = "AUTONOMOUS" | "MANAGED";
 
 export interface OnboardingSeniorInput {
   nickname: string;
   gender: SeniorGender;
-  notificationMode: NotificationMode;
+  careMode: CareMode;
 }
 
 export interface OnboardingBody {
@@ -173,6 +174,8 @@ export function clearMeCache() {
  */
 export async function logoutKakao() {
   const refreshToken = await getRefreshToken();
+  // FCM 토큰 비활성화는 access token이 살아있는 동안에 처리해야 함
+  await tearDownPush();
   try {
     await KakaoLogin.logout();
   } catch {
