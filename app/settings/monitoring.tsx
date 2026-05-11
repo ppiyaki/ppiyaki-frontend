@@ -66,7 +66,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       },
       {
         key: "medicationCompleteEnabled",
-        label: "복약 완료 축하 알림",
+        label: "복약 완료 알림",
         description: "시니어가 복약을 완료하면 알림이 와요",
       },
       {
@@ -103,9 +103,9 @@ export default function MonitoringSettingsScreen() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await listLinkedSeniors();
-        setSeniors(res.responses);
-        if (res.responses[0]) setSelectedId(res.responses[0].id);
+        const list = await listLinkedSeniors();
+        setSeniors(list);
+        if (list[0]) setSelectedId(list[0].id);
       } catch (e) {
         console.log("[monitoring] listLinkedSeniors failed:", e);
         setError("시니어 정보를 불러오지 못했어요");
@@ -193,6 +193,22 @@ export default function MonitoringSettingsScreen() {
     }
   };
 
+  /** 현재 settings 가 AUTONOMOUS/MANAGED 프리셋과 일치하는지 추론. 사용자 정의 시 null. */
+  const inferredPreset: CareMode | null = (() => {
+    if (!settings) return null;
+    const isAutonomous =
+      settings.medicationDelayThresholdMinutes === 60 &&
+      settings.familySafetyThresholdHours === 48 &&
+      settings.medicationCompleteEnabled === false;
+    if (isAutonomous) return "AUTONOMOUS";
+    const isManaged =
+      settings.medicationDelayThresholdMinutes === 30 &&
+      settings.familySafetyThresholdHours === 12 &&
+      settings.medicationCompleteEnabled === true;
+    if (isManaged) return "MANAGED";
+    return null;
+  })();
+
   return (
     <SafeAreaView
       style={styles.safe}
@@ -262,42 +278,28 @@ export default function MonitoringSettingsScreen() {
                 간편 모드 선택
               </AppText>
               <View style={styles.presetRow}>
-                <Pressable
+                <PresetCard
+                  selected={inferredPreset === "AUTONOMOUS"}
+                  disabled={saving}
                   onPress={() => applyPreset("AUTONOMOUS")}
+                  iconName="leaf"
+                  iconColor="#5BC4AE"
+                  selectedBorderColor="#5BC4AE"
+                  selectedBgColor="#E8F7F2"
+                  title="기본 건강 알림"
+                  desc="지연 60분 / 미접속 48시간"
+                />
+                <PresetCard
+                  selected={inferredPreset === "MANAGED"}
                   disabled={saving}
-                  style={({ pressed }) => [
-                    styles.presetBtn,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Ionicons name="leaf" size={18} color="#5BC4AE" />
-                  <View style={styles.presetText}>
-                    <AppText type="pretendard-b" style={styles.presetTitle}>
-                      기본 건강 알림
-                    </AppText>
-                    <AppText type="pretendard-r" style={styles.presetDesc}>
-                      지연 60분 / 미접속 48시간
-                    </AppText>
-                  </View>
-                </Pressable>
-                <Pressable
                   onPress={() => applyPreset("MANAGED")}
-                  disabled={saving}
-                  style={({ pressed }) => [
-                    styles.presetBtn,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Ionicons name="shield-checkmark" size={18} color="#F8B835" />
-                  <View style={styles.presetText}>
-                    <AppText type="pretendard-b" style={styles.presetTitle}>
-                      집중 안심 모드
-                    </AppText>
-                    <AppText type="pretendard-r" style={styles.presetDesc}>
-                      지연 30분 / 미접속 12시간
-                    </AppText>
-                  </View>
-                </Pressable>
+                  iconName="shield-checkmark"
+                  iconColor="#F8B835"
+                  selectedBorderColor="#F8B835"
+                  selectedBgColor="#FFF4C7"
+                  title="집중 안심 모드"
+                  desc="지연 30분 / 미접속 12시간"
+                />
               </View>
             </View>
 
@@ -406,6 +408,60 @@ export default function MonitoringSettingsScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function PresetCard({
+  selected,
+  disabled,
+  onPress,
+  iconName,
+  iconColor,
+  selectedBorderColor,
+  selectedBgColor,
+  title,
+  desc,
+}: {
+  selected: boolean;
+  disabled: boolean;
+  onPress: () => void;
+  iconName: ComponentProps<typeof Ionicons>["name"];
+  iconColor: string;
+  selectedBorderColor: string;
+  selectedBgColor: string;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.presetBtn,
+        selected && {
+          borderColor: selectedBorderColor,
+          borderWidth: 2,
+          backgroundColor: selectedBgColor,
+        },
+        disabled && { opacity: 0.6 },
+        pressed && !disabled && { opacity: 0.85 },
+      ]}
+    >
+      <Ionicons name={iconName} size={18} color={iconColor} />
+      <View style={styles.presetText}>
+        <AppText type="pretendard-b" style={styles.presetTitle}>
+          {title}
+        </AppText>
+        <AppText type="pretendard-r" style={styles.presetDesc}>
+          {desc}
+        </AppText>
+      </View>
+      {selected && (
+        <View style={[styles.presetCheck, { backgroundColor: selectedBorderColor }]}>
+          <Ionicons name="checkmark" size={12} color="#FFF" />
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -537,6 +593,13 @@ const styles = StyleSheet.create({
   presetText: { flex: 1, gap: 2 },
   presetTitle: { fontSize: 14, color: "#222" },
   presetDesc: { fontSize: 11, color: "#777" },
+  presetCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 
   /* 설정 카드 */
   settingsCard: {

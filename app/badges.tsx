@@ -1,12 +1,60 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
-import { Badge, BADGES } from "@/data/badges";
+import { getBadgeImage } from "@/data/badges";
+import {
+  BadgeTypeDef,
+  PetBadge,
+  getBadgeTypes,
+  getMyPet,
+} from "@/services/pets";
 import { Ionicons } from "@expo/vector-icons";
-import { Image, ScrollView, StyleSheet, View } from "react-native";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function BadgesScreen() {
-  const unlockedCount = BADGES.filter((b) => b.unlocked).length;
+  const [types, setTypes] = useState<BadgeTypeDef[]>([]);
+  const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void (async () => {
+        setLoading(true);
+        const [typesRes, petRes] = await Promise.all([
+          getBadgeTypes().catch((e) => {
+            console.log("[badges] getBadgeTypes failed:", e);
+            return [] as BadgeTypeDef[];
+          }),
+          getMyPet().catch(() => null),
+        ]);
+        if (cancelled) return;
+        setTypes(typesRes);
+        setUnlocked(
+          new Set((petRes?.badges ?? []).map((b: PetBadge) => b.badgeType)),
+        );
+        setLoading(false);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
+  const sorted = [...types].sort((a, b) => {
+    const aOn = unlocked.has(a.badgeType) ? 0 : 1;
+    const bOn = unlocked.has(b.badgeType) ? 0 : 1;
+    return aOn - bOn;
+  });
+  const unlockedCount = sorted.filter((t) => unlocked.has(t.badgeType)).length;
 
   return (
     <SafeAreaView
@@ -19,7 +67,6 @@ export default function BadgesScreen() {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        {/* 진행 요약 */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryText}>
             <AppText type="pretendard-m" style={styles.summaryLabel}>
@@ -30,34 +77,49 @@ export default function BadgesScreen() {
                 {unlockedCount}
               </AppText>
               <AppText type="pretendard-m" style={styles.summaryTotal}>
-                / {BADGES.length}개
+                / {sorted.length}개
               </AppText>
             </View>
           </View>
           <Ionicons name="trophy" size={44} color="#F8B835" />
         </View>
 
-        {/* 뱃지 리스트 */}
-        <View style={styles.list}>
-          {BADGES.map((badge) => (
-            <BadgeRow key={badge.key} badge={badge} />
-          ))}
-        </View>
+        {loading && sorted.length === 0 ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#FFD24D" />
+          </View>
+        ) : (
+          <View style={styles.list}>
+            {sorted.map((t) => (
+              <BadgeRow
+                key={t.badgeType}
+                type={t}
+                unlocked={unlocked.has(t.badgeType)}
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function BadgeRow({ badge }: { badge: Badge }) {
+function BadgeRow({
+  type,
+  unlocked,
+}: {
+  type: BadgeTypeDef;
+  unlocked: boolean;
+}) {
   return (
-    <View style={[styles.row, !badge.unlocked && styles.rowLocked]}>
+    <View style={[styles.row, !unlocked && styles.rowLocked]}>
       <View style={styles.imgWrap}>
         <Image
-          source={badge.image}
-          style={[styles.img, !badge.unlocked && styles.imgLocked]}
+          source={getBadgeImage(type.badgeType)}
+          style={[styles.img, !unlocked && styles.imgLocked]}
           resizeMode="contain"
         />
-        {!badge.unlocked && (
+        {!unlocked && (
           <View style={styles.lockBadge}>
             <Ionicons name="lock-closed" size={14} color="#FFF" />
           </View>
@@ -65,20 +127,20 @@ function BadgeRow({ badge }: { badge: Badge }) {
       </View>
       <View style={styles.body}>
         <AppText type="pretendard-b" style={styles.label}>
-          {badge.label.replace(/\n/g, " ")}
+          {type.displayName}
         </AppText>
         <AppText type="pretendard-m" style={styles.description}>
-          {badge.description}
+          {type.description}
         </AppText>
         <View style={styles.conditionRow}>
           <View
             style={[
               styles.statusDot,
-              { backgroundColor: badge.unlocked ? "#5BC4AE" : "#BBB" },
+              { backgroundColor: unlocked ? "#5BC4AE" : "#BBB" },
             ]}
           />
           <AppText type="pretendard-m" style={styles.condition}>
-            {badge.unlocked ? "획득 완료" : badge.condition}
+            {unlocked ? "획득 완료" : "미획득"}
           </AppText>
         </View>
       </View>
@@ -128,6 +190,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#5A4500",
   },
+
+  loadingBox: { paddingVertical: 60, alignItems: "center" },
+
   /* ── 리스트 ── */
   list: {
     gap: 10,

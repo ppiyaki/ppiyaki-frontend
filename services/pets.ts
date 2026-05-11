@@ -32,3 +32,17 @@ export interface PetMe {
 export async function getMyPet(): Promise<PetMe> {
   return apiFetch<PetMe>("/api/v1/pets/me");
 }
+
+export interface BadgeTypeDef {
+  badgeType: string;
+  displayName: string;
+  description: string;
+}
+
+/**
+ * 시스템 전체 뱃지 타입 목록.
+ * 명세상 인증 불필요지만 실제 서버가 401을 던지므로 토큰 함께 전송.
+ */
+export async function getBadgeTypes(): Promise<BadgeTypeDef[]> {
+  return apiFetch<BadgeTypeDef[]>("/api/v1/pets/badges/types");
+}

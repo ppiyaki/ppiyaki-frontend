@@ -2,8 +2,16 @@ import AppText from "@/components/app-text";
 import SeniorSummaryHeader from "@/components/senior-summary-header";
 import { getMe } from "@/services/auth";
 import { LinkedSenior, resolveLinkedSenior } from "@/services/caregivers";
+import {
+  DailyDashboard,
+  DailySlot,
+  WeeklyDashboard,
+  getDashboardDaily,
+  getDashboardWeekly,
+} from "@/services/dashboard";
 import { listMedicines, Medicine } from "@/services/medicines";
 import { listPrescriptions } from "@/services/prescriptions";
+import { ServerMealSlot } from "@/services/user-settings";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -17,7 +25,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type DoseStatus = "done" | "upcoming";
+type DoseStatus = "done" | "upcoming" | "missed";
 
 interface Dose {
   time: string;
@@ -40,40 +48,73 @@ function getSeniorImage(id: number): ImageSourcePropType {
 
 const FALLBACK_SENIOR_IMAGE = SENIOR_IMAGES[0];
 
-const DOSES: Dose[] = [
-  {
-    time: "09:00",
-    label: "아침",
-    meds: "혈압약, 당뇨약, ...",
-    status: "done",
-  },
-  {
-    time: "14:00",
-    label: "점심",
-    meds: "당뇨약",
-    status: "done",
-  },
-  {
-    time: "19:00",
-    label: "저녁",
-    meds: "혈압약, 당뇨약, ...",
-    status: "upcoming",
-  },
-];
-
 const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+const SLOT_LABEL: Record<ServerMealSlot, string> = {
+  BREAKFAST: "아침",
+  LUNCH: "점심",
+  DINNER: "저녁",
+};
+
+function toIsoDate(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getWeekStart(today: Date): string {
+  const d = new Date(today);
+  d.setDate(d.getDate() - d.getDay()); // 일요일로
+  return toIsoDate(d);
+}
+
+function trimMealTime(hms: string): string {
+  return hms.slice(0, 5); // "HH:mm:ss" → "HH:mm"
+}
+
+function mapDailySlotToDose(slot: DailySlot): Dose {
+  const meds =
+    slot.medicines.length === 0
+      ? "복약 없음"
+      : slot.medicines
+          .map((m) => m.name)
+          .slice(0, 2)
+          .join(", ") +
+        (slot.medicines.length > 2 ? ` 외 ${slot.medicines.length - 2}개` : "");
+  let status: DoseStatus;
+  if (slot.status === "PERFECT" || slot.status === "DELAYED") status = "done";
+  else if (slot.status === "MISSED") status = "missed";
+  else status = "upcoming"; // PENDING, NOT_SCHEDULED
+  return {
+    time: trimMealTime(slot.mealTime),
+    label: SLOT_LABEL[slot.slot],
+    meds,
+    status,
+  };
+}
+
+/** 오늘 기준 weekly.days 에서 뒤에서부터 연속 PERFECT 일수 카운트 */
+function calcStreakFromWeekly(weekly: WeeklyDashboard): number {
+  let count = 0;
+  for (let i = weekly.days.length - 1; i >= 0; i--) {
+    const d = weekly.days[i];
+    if (d.dayStatus === "FUTURE") continue;
+    if (d.dayStatus === "PERFECT") count += 1;
+    else break;
+  }
+  return count;
+}
 
 export default function FamilyHomeScreen() {
   const router = useRouter();
-  const completed = DOSES.filter((d) => d.status === "done").length;
 
   const [pendingCount, setPendingCount] = useState(0);
   const [senior, setSenior] = useState<LinkedSenior | null>(null);
   const [caregiverName, setCaregiverName] = useState("보호자");
   const [medicines, setMedicines] = useState<Medicine[]>([]);
-
-  // 더미 streak (logs 기반 계산은 추후 작업)
-  const streakDays = 6;
+  const [daily, setDaily] = useState<DailyDashboard | null>(null);
+  const [weekly, setWeekly] = useState<WeeklyDashboard | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -89,28 +130,37 @@ export default function FamilyHomeScreen() {
         }
       })();
 
-      // 2) 연결된 시니어 → 약물 + 검토 대기 처방전 (v0.9.2: seniorId 쿼리 필수)
-      // resolveLinkedSenior: listLinkedSeniors 실패 시 dev 폴백 사용
+      // 2) 연결된 시니어 → 약물, 처방전, 대시보드
       (async () => {
         try {
           const first = await resolveLinkedSenior();
           if (cancelled) return;
           setSenior(first);
           if (first) {
-            try {
-              const meds = await listMedicines(first.id);
-              if (!cancelled) setMedicines(meds.responses);
-            } catch {
-              if (!cancelled) setMedicines([]);
-            }
-            try {
-              const pres = await listPrescriptions("PENDING_REVIEW", first.id);
-              if (!cancelled) setPendingCount(pres.responses.length);
-            } catch {
-              if (!cancelled) setPendingCount(0);
-            }
+            const today = new Date();
+            const todayIso = toIsoDate(today);
+            const weekStartIso = getWeekStart(today);
+            const [meds, pres, dailyRes, weeklyRes] = await Promise.all([
+              listMedicines(first.id).catch(() => ({ responses: [] as Medicine[] })),
+              listPrescriptions("PENDING_REVIEW", first.id).catch(() => ({
+                responses: [],
+              })),
+              getDashboardDaily(first.id, todayIso).catch((e) => {
+                console.log("[family-home] daily dashboard failed:", e);
+                return null;
+              }),
+              getDashboardWeekly(first.id, weekStartIso).catch((e) => {
+                console.log("[family-home] weekly dashboard failed:", e);
+                return null;
+              }),
+            ]);
+            if (cancelled) return;
+            setMedicines(meds.responses);
+            setPendingCount(pres.responses.length);
+            setDaily(dailyRes);
+            setWeekly(weeklyRes);
           } else {
-            // 시니어 미연동 → 본인 처방전 (시니어 본인 케이스 대비)
+            // 시니어 미연동 → 본인 처방전만
             try {
               const pres = await listPrescriptions("PENDING_REVIEW");
               if (!cancelled) setPendingCount(pres.responses.length);
@@ -119,10 +169,12 @@ export default function FamilyHomeScreen() {
             }
           }
         } catch (e) {
-          console.log("[family-home] listLinkedSeniors failed:", e);
+          console.log("[family-home] resolveLinkedSenior failed:", e);
           if (!cancelled) {
             setSenior(null);
             setMedicines([]);
+            setDaily(null);
+            setWeekly(null);
           }
         }
       })();
@@ -132,6 +184,10 @@ export default function FamilyHomeScreen() {
       };
     }, []),
   );
+
+  const doses: Dose[] = daily?.slots.map(mapDailySlotToDose) ?? [];
+  const completed = doses.filter((d) => d.status === "done").length;
+  const streakDays = weekly ? calcStreakFromWeekly(weekly) : 0;
 
   const seniorName = senior?.nickname ?? "어르신";
   const seniorImage = senior
@@ -188,20 +244,26 @@ export default function FamilyHomeScreen() {
           </AppText>
 
           <View style={styles.timeline}>
-            {DOSES.map((dose, idx) => (
-              <DoseRow
-                key={dose.time}
-                dose={dose}
-                isLast={idx === DOSES.length - 1}
-              />
-            ))}
+            {doses.length === 0 ? (
+              <AppText type="pretendard-m" style={styles.doseEmpty}>
+                오늘 복약 일정이 없어요
+              </AppText>
+            ) : (
+              doses.map((dose, idx) => (
+                <DoseRow
+                  key={`${dose.time}-${dose.label}`}
+                  dose={dose}
+                  isLast={idx === doses.length - 1}
+                />
+              ))
+            )}
           </View>
 
           <View style={styles.journeyFooter}>
             <AppText type="pretendard-b" style={styles.journeySummary}>
               총{" "}
               <AppText type="extrabold" style={{ color: "#4799E0" }}>
-                {DOSES.length}
+                {doses.length}
               </AppText>
               회 중{" "}
               <AppText type="extrabold" style={{ color: "#5BC4AE" }}>
@@ -233,19 +295,23 @@ export default function FamilyHomeScreen() {
           </View>
 
           <View style={styles.weekRow}>
-            {WEEK_DAYS.map((day, idx) => (
-              <View key={day} style={styles.weekItem}>
-                <AppText type="pretendard-m" style={styles.weekLabel}>
-                  {day}
-                </AppText>
-                <View
-                  style={[
-                    styles.weekDot,
-                    idx < streakDays ? styles.weekDotOn : styles.weekDotOff,
-                  ]}
-                />
-              </View>
-            ))}
+            {WEEK_DAYS.map((day, idx) => {
+              const dayInfo = weekly?.days[idx];
+              const on = dayInfo?.dayStatus === "PERFECT";
+              return (
+                <View key={day} style={styles.weekItem}>
+                  <AppText type="pretendard-m" style={styles.weekLabel}>
+                    {day}
+                  </AppText>
+                  <View
+                    style={[
+                      styles.weekDot,
+                      on ? styles.weekDotOn : styles.weekDotOff,
+                    ]}
+                  />
+                </View>
+              );
+            })}
           </View>
 
           <View style={styles.challengeRow}>
@@ -315,6 +381,7 @@ export default function FamilyHomeScreen() {
 
 function DoseRow({ dose, isLast }: { dose: Dose; isLast: boolean }) {
   const done = dose.status === "done";
+  const missed = dose.status === "missed";
   return (
     <View style={styles.doseRow}>
       <AppText type="pretendard-m" style={styles.doseTime}>
@@ -324,10 +391,13 @@ function DoseRow({ dose, isLast }: { dose: Dose; isLast: boolean }) {
         <View
           style={[
             styles.doseDot,
-            done ? styles.doseDotDone : styles.doseDotPending,
+            done && styles.doseDotDone,
+            !done && !missed && styles.doseDotPending,
+            missed && styles.doseDotMissed,
           ]}
         >
           {done && <Ionicons name="checkmark" size={18} color="#FFF" />}
+          {missed && <Ionicons name="close" size={18} color="#FFF" />}
         </View>
         {!isLast && (
           <View style={[styles.doseLine, done ? styles.doseLineDone : null]} />
@@ -344,10 +414,12 @@ function DoseRow({ dose, isLast }: { dose: Dose; isLast: boolean }) {
           type="pretendard-m"
           style={[
             styles.doseStatus,
-            done ? styles.doseStatusDone : styles.doseStatusPending,
+            done && styles.doseStatusDone,
+            !done && !missed && styles.doseStatusPending,
+            missed && styles.doseStatusMissed,
           ]}
         >
-          {done ? "완료" : "예정"}
+          {done ? "완료" : missed ? "누락" : "예정"}
         </AppText>
       </View>
     </View>
@@ -445,6 +517,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#D5D5D5",
   },
+  doseDotMissed: {
+    backgroundColor: "#E14B4B",
+  },
   doseLine: {
     flex: 1,
     width: 2,
@@ -477,6 +552,15 @@ const styles = StyleSheet.create({
   },
   doseStatusPending: {
     color: "#F8B835",
+  },
+  doseStatusMissed: {
+    color: "#E14B4B",
+  },
+  doseEmpty: {
+    paddingVertical: 24,
+    textAlign: "center",
+    color: "#888",
+    fontSize: 13,
   },
   journeyFooter: {
     flexDirection: "row",

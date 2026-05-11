@@ -1,9 +1,16 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
-import { Badge, BADGES } from "@/data/badges";
+import { getBadgeImage } from "@/data/badges";
 import { ApiError } from "@/services/api";
 import { getMe } from "@/services/auth";
-import { getMyPet, PetMe, PetStage } from "@/services/pets";
+import {
+  BadgeTypeDef,
+  PetBadge,
+  PetMe,
+  PetStage,
+  getBadgeTypes,
+  getMyPet,
+} from "@/services/pets";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -83,6 +90,7 @@ export default function GrowthScreen() {
   const router = useRouter();
   const [nickname, setNickname] = useState<string>("");
   const [pet, setPet] = useState<PetMe | null>(null);
+  const [badgeTypes, setBadgeTypes] = useState<BadgeTypeDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [petMissing, setPetMissing] = useState(false);
 
@@ -92,7 +100,7 @@ export default function GrowthScreen() {
       void (async () => {
         setLoading(true);
         try {
-          const [me, petRes] = await Promise.all([
+          const [me, petRes, typesRes] = await Promise.all([
             getMe().catch(() => null),
             getMyPet().catch((e) => {
               if (e instanceof ApiError && e.status === 404) {
@@ -101,6 +109,10 @@ export default function GrowthScreen() {
               }
               throw e;
             }),
+            getBadgeTypes().catch((e) => {
+              console.log("[growth] getBadgeTypes failed:", e);
+              return [] as BadgeTypeDef[];
+            }),
           ]);
           if (cancelled) return;
           if (me) setNickname(me.nickname);
@@ -108,6 +120,7 @@ export default function GrowthScreen() {
             setPet(petRes);
             setPetMissing(false);
           }
+          setBadgeTypes(typesRes);
         } catch (e) {
           console.log("[growth] load failed:", e);
         } finally {
@@ -130,6 +143,10 @@ export default function GrowthScreen() {
   const nextStage = STAGES[safeIdx + 1];
   const progress = nextStage ? Math.min(streak / nextStage.threshold, 1) : 1;
   const daysLeft = nextStage ? Math.max(nextStage.threshold - streak, 0) : 0;
+
+  const unlockedBadgeSet = new Set(
+    (pet?.badges ?? []).map((b: PetBadge) => b.badgeType),
+  );
 
   return (
     <SafeAreaView
@@ -309,9 +326,16 @@ export default function GrowthScreen() {
               </AppText>
               <View style={styles.badgeCard}>
                 <View style={styles.badgeGrid}>
-                  {BADGES.slice(0, 3).map((badge) => (
-                    <BadgeItem key={badge.key} badge={badge} />
-                  ))}
+                  {sortBadgeTypes(badgeTypes, unlockedBadgeSet)
+                    .slice(0, 3)
+                    .map((t) => (
+                      <BadgeItem
+                        key={t.badgeType}
+                        badgeType={t.badgeType}
+                        label={t.displayName}
+                        unlocked={unlockedBadgeSet.has(t.badgeType)}
+                      />
+                    ))}
                 </View>
                 <Pressable
                   onPress={() => router.push("/badges" as any)}
@@ -400,16 +424,24 @@ function StatBox({
   );
 }
 
-function BadgeItem({ badge }: { badge: Badge }) {
+function BadgeItem({
+  badgeType,
+  label,
+  unlocked,
+}: {
+  badgeType: string;
+  label: string;
+  unlocked: boolean;
+}) {
   return (
     <View style={styles.badgeItem}>
       <View style={styles.badgeImgWrap}>
         <Image
-          source={badge.image}
-          style={[styles.badgeImg, !badge.unlocked && styles.badgeImgLocked]}
+          source={getBadgeImage(badgeType)}
+          style={[styles.badgeImg, !unlocked && styles.badgeImgLocked]}
           resizeMode="contain"
         />
-        {!badge.unlocked && (
+        {!unlocked && (
           <View style={styles.badgeLock}>
             <Ionicons name="lock-closed" size={12} color="#FFF" />
           </View>
@@ -417,12 +449,24 @@ function BadgeItem({ badge }: { badge: Badge }) {
       </View>
       <AppText
         type="pretendard-m"
-        style={[styles.badgeLabel, !badge.unlocked && styles.badgeLabelLocked]}
+        style={[styles.badgeLabel, !unlocked && styles.badgeLabelLocked]}
       >
-        {badge.label}
+        {label}
       </AppText>
     </View>
   );
+}
+
+/** 잠금 해제된 뱃지 먼저, 그 다음 잠긴 뱃지 (서버 응답 순서 유지) */
+function sortBadgeTypes(
+  types: BadgeTypeDef[],
+  unlocked: Set<string>,
+): BadgeTypeDef[] {
+  return [...types].sort((a, b) => {
+    const aOn = unlocked.has(a.badgeType) ? 0 : 1;
+    const bOn = unlocked.has(b.badgeType) ? 0 : 1;
+    return aOn - bOn;
+  });
 }
 
 function getCurrentStageIdx(streak: number): number {

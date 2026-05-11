@@ -1,12 +1,15 @@
 import { apiFetch } from "./api";
-import type { UserRole } from "./auth";
+import type { SeniorGender, UserRole } from "./auth";
 
 export type CareMode = "MANAGED" | "AUTONOMOUS";
 
 export interface LinkedSenior {
   id: number;
   nickname: string;
-  // TODO: 명세 본문 받으면 추가 필드 매핑 필요
+  /** yyyy-MM-dd */
+  dob: string;
+  gender: SeniorGender;
+  careMode: CareMode;
 }
 
 export interface OnboardingProfileBody {
@@ -25,46 +28,23 @@ export async function setOnboardingProfile(
   });
 }
 
-/** 보호자의 연결된 시니어 목록 조회 */
-export async function listLinkedSeniors(): Promise<{
-  responses: LinkedSenior[];
-}> {
-  return apiFetch("/api/v1/users/me/seniors");
+/** 보호자의 연결된 시니어 목록 조회. 응답은 raw 배열. */
+export async function listLinkedSeniors(): Promise<LinkedSenior[]> {
+  return apiFetch<LinkedSenior[]>("/api/v1/care-relations/seniors");
 }
 
-/**
- * 임시 dev 폴백 시니어.
- * TODO(backend): listLinkedSeniors(GET /users/me/seniors) 구현되면 폴백 제거.
- * care_relations은 DB에 살아있지만 보호자 입장에서 시니어 ID를 발견할 API가 없어서,
- * 테스트 보호자 토큰(17)에 매칭되는 시니어(16)를 fallback으로 둔다.
- */
-const DEV_FALLBACK_SENIOR: LinkedSenior = {
-  id: 16,
-  nickname: "어르신",
-};
-
-/**
- * 보호자가 사용할 첫 시니어 객체를 얻는다.
- * 1) listLinkedSeniors 정상 → 첫 시니어
- * 2) 실패(404 등) → __DEV__이면 DEV_FALLBACK_SENIOR, 아니면 null
- */
+/** 보호자가 사용할 첫 시니어. 연결된 시니어가 없거나 조회 실패 시 null. */
 export async function resolveLinkedSenior(): Promise<LinkedSenior | null> {
   try {
-    const res = await listLinkedSeniors();
-    const first = res.responses[0];
-    if (first) return first;
+    const list = await listLinkedSeniors();
+    return list[0] ?? null;
   } catch (e) {
-    if (__DEV__) {
-      console.log(
-        "[caregivers] listLinkedSeniors failed, using DEV fallback:",
-        e,
-      );
-    }
+    console.log("[caregivers] listLinkedSeniors failed:", e);
+    return null;
   }
-  return __DEV__ ? DEV_FALLBACK_SENIOR : null;
 }
 
-/** ID만 필요한 경우 — resolveLinkedSenior와 동일 폴백 적용 */
+/** ID만 필요한 경우 */
 export async function resolveSeniorId(): Promise<number | undefined> {
   const s = await resolveLinkedSenior();
   return s?.id;

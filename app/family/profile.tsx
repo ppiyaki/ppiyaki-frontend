@@ -1,15 +1,20 @@
 import AppText from "@/components/app-text";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
-import { logoutKakao } from "@/services/auth";
+import { getMe, logoutKakao } from "@/services/auth";
+import {
+  LinkedSenior,
+  listLinkedSeniors,
+  unlinkSenior,
+} from "@/services/caregivers";
 import { InviteCodeResponse, issueInviteCode } from "@/services/care-relations";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import * as Clipboard from "expo-clipboard";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  ImageSourcePropType,
   Modal,
   Pressable,
   ScrollView,
@@ -18,42 +23,42 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-interface LinkedSenior {
-  id: string;
-  name: string;
-  image: ImageSourcePropType;
-}
+const SENIOR_AVATAR = require("../../assets/images/pf/pfimg2.png");
 
-const USER = {
-  name: "김철수",
-  email: "chulsooK@gmail.com",
-};
-
-const LINKED_SENIORS: LinkedSenior[] = [
-  {
-    // dev 폴백 시니어 ID (백엔드 테스트 시니어 토큰=16)
-    // TODO: listLinkedSeniors 구현되면 실제 목록으로 교체
-    id: "16",
-    name: "김장군",
-    image: require("../../assets/images/pf/pfimg2.png"),
-  },
-  {
-    id: "2",
-    name: "김명군",
-    image: require("../../assets/images/pf/pfimg3.png"),
-  },
-  {
-    id: "3",
-    name: "김복순",
-    image: require("../../assets/images/pf/pfimg4.png"),
-  },
-];
+// TODO: 백엔드 이메일 필드 추가되면 me.email 사용
+const PLACEHOLDER_EMAIL = "이메일 미연동";
 
 export default function FamilyProfileScreen() {
   const router = useRouter();
   const confirm = useConfirm();
 
+  const [nickname, setNickname] = useState<string>("");
+  const [seniors, setSeniors] = useState<LinkedSenior[]>([]);
+  const [loading, setLoading] = useState(true);
   const [inviteSenior, setInviteSenior] = useState<LinkedSenior | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [me, list] = await Promise.all([
+        getMe().catch(() => null),
+        listLinkedSeniors().catch((e) => {
+          console.log("[family-profile] listLinkedSeniors failed:", e);
+          return [] as LinkedSenior[];
+        }),
+      ]);
+      if (me) setNickname(me.nickname);
+      setSeniors(list);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   const openInviteModal = (senior: LinkedSenior) => {
     setInviteSenior(senior);
@@ -78,15 +83,29 @@ export default function FamilyProfileScreen() {
     }
   };
 
-  const handleUnlink = async (name: string) => {
+  const handleUnlink = async (senior: LinkedSenior) => {
     const ok = await confirm({
       title: "연동 해제",
-      message: `${name}님과의 연동을 해제하시겠어요?`,
+      message: `${senior.nickname}님과의 연동을 해제하시겠어요?`,
       confirmText: "해제",
       danger: true,
     });
     if (!ok) return;
-    // TODO: 연동 해제 API 연결
+    try {
+      await unlinkSenior(senior.id);
+      await load();
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? e.toUserMessage()
+          : "연동 해제에 실패했어요";
+      await confirm({
+        title: "해제 실패",
+        message: msg,
+        confirmText: "확인",
+        cancelText: "닫기",
+      });
+    }
   };
 
   return (
@@ -110,10 +129,10 @@ export default function FamilyProfileScreen() {
           </View>
           <View style={{ flex: 1, gap: 4 }}>
             <AppText type="pretendard-b" style={styles.userName}>
-              {USER.name}
+              {nickname || " "}
             </AppText>
             <AppText type="pretendard-m" style={styles.userEmail}>
-              {USER.email}
+              {PLACEHOLDER_EMAIL}
             </AppText>
           </View>
         </View>
@@ -124,15 +143,26 @@ export default function FamilyProfileScreen() {
             연동된 시니어 관리
           </AppText>
           <View style={styles.seniorListCard}>
-            {LINKED_SENIORS.map((senior, idx) => (
-              <SeniorRow
-                key={senior.id}
-                senior={senior}
-                showDivider={idx < LINKED_SENIORS.length - 1}
-                onUnlink={() => handleUnlink(senior.name)}
-                onManage={() => openInviteModal(senior)}
-              />
-            ))}
+            {loading && (
+              <View style={styles.seniorEmpty}>
+                <ActivityIndicator size="small" color="#FFD24D" />
+              </View>
+            )}
+            {!loading && seniors.length === 0 && (
+              <AppText type="pretendard-m" style={styles.seniorEmptyText}>
+                연동된 시니어가 없어요
+              </AppText>
+            )}
+            {!loading &&
+              seniors.map((senior, idx) => (
+                <SeniorRow
+                  key={senior.id}
+                  senior={senior}
+                  showDivider={idx < seniors.length - 1}
+                  onUnlink={() => handleUnlink(senior)}
+                  onManage={() => openInviteModal(senior)}
+                />
+              ))}
           </View>
         </View>
 
@@ -195,6 +225,8 @@ function InviteCodeModal({
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<InviteCodeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const visible = senior !== null;
 
@@ -202,6 +234,7 @@ function InviteCodeModal({
     setLoading(true);
     setError(null);
     setData(null);
+    setCopied(false);
     try {
       const res = await issueInviteCode(sId);
       setData(res);
@@ -216,20 +249,36 @@ function InviteCodeModal({
     }
   };
 
-  // senior prop 변화 감지해서 자동 발급
-  // useEffect 사용 위해 import 추가 필요
-  React.useEffect(() => {
+  useEffect(() => {
     if (senior) {
       void fetchCode(Number(senior.id));
     } else {
       setData(null);
       setError(null);
+      setCopied(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [senior]);
 
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
+
   const handleReissue = () => {
     if (senior) void fetchCode(Number(senior.id));
+  };
+
+  const handleCopy = async () => {
+    if (!data?.inviteCode) return;
+    await Clipboard.setStringAsync(data.inviteCode);
+    setCopied(true);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => {
+      setCopied(false);
+      copyTimer.current = null;
+    }, 1500);
   };
 
   return (
@@ -243,7 +292,7 @@ function InviteCodeModal({
         <Pressable style={styles.modalCard} onPress={() => {}}>
           <View style={styles.modalHead}>
             <AppText type="pretendard-b" style={styles.modalTitle}>
-              {senior?.name}님 초대 코드
+              {senior?.nickname}님 초대 코드
             </AppText>
             <Pressable onPress={onClose} hitSlop={10} style={styles.modalClose}>
               <Ionicons name="close" size={20} color="#666" />
@@ -281,6 +330,31 @@ function InviteCodeModal({
           )}
 
           <View style={styles.modalActions}>
+            <Pressable
+              onPress={handleCopy}
+              disabled={!data?.inviteCode}
+              style={({ pressed }) => [
+                styles.modalCopyBtn,
+                copied && styles.modalCopyBtnDone,
+                !data?.inviteCode && { opacity: 0.5 },
+                pressed && data?.inviteCode && { opacity: 0.85 },
+              ]}
+            >
+              <Ionicons
+                name={copied ? "checkmark" : "copy-outline"}
+                size={16}
+                color={copied ? "#5BC4AE" : "#222"}
+              />
+              <AppText
+                type="pretendard-b"
+                style={[
+                  styles.modalCopyText,
+                  copied && styles.modalCopyTextDone,
+                ]}
+              >
+                {copied ? "복사됨" : "복사"}
+              </AppText>
+            </Pressable>
             <Pressable
               onPress={handleReissue}
               style={({ pressed }) => [
@@ -323,13 +397,13 @@ function SeniorRow({
       <View style={styles.seniorTop}>
         <View style={styles.seniorAvatar}>
           <Image
-            source={senior.image}
+            source={SENIOR_AVATAR}
             style={styles.avatar}
             resizeMode="cover"
           />
         </View>
         <AppText type="pretendard-b" style={styles.seniorName}>
-          {senior.name}
+          {senior.nickname}
         </AppText>
         <Pressable hitSlop={10} style={styles.infoBtn}>
           <Ionicons name="information-circle-outline" size={22} color="#777" />
@@ -467,6 +541,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1ECDB",
     overflow: "hidden",
+  },
+  seniorEmpty: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+  seniorEmptyText: {
+    paddingVertical: 24,
+    textAlign: "center",
+    color: "#888",
+    fontSize: 14,
   },
   seniorRow: {
     paddingHorizontal: 16,
@@ -665,5 +749,28 @@ const styles = StyleSheet.create({
   modalPrimaryText: {
     fontSize: 14,
     color: "#222",
+  },
+  modalCopyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#FAFAFA",
+  },
+  modalCopyBtnDone: {
+    borderColor: "#BDEFEA",
+    backgroundColor: "#E8F7F2",
+  },
+  modalCopyText: {
+    fontSize: 14,
+    color: "#222",
+  },
+  modalCopyTextDone: {
+    color: "#5BC4AE",
   },
 });

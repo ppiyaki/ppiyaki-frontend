@@ -39,7 +39,7 @@ export interface PrescriptionDetail {
   id: number;
   ownerId: number;
   status: PrescriptionStatus;
-  maskedImageObjectKey?: string | null;
+  maskedImageUrl?: string | null;
   failureReason?: string | null;
   candidates: PrescriptionCandidate[];
   createdAt: string;

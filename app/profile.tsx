@@ -1,7 +1,9 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
+import { ApiError } from "@/services/api";
 import { getMe, logoutKakao } from "@/services/auth";
+import { PetMe, getMyPet } from "@/services/pets";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -29,27 +31,43 @@ interface SubMenuRow {
   onPress?: () => void;
 }
 
+function formatToday(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}.${mm}.${dd}`;
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
   const confirm = useConfirm();
   const [nickname, setNickname] = useState<string>("");
+  const [pet, setPet] = useState<PetMe | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       void (async () => {
-        try {
-          const me = await getMe();
-          if (!cancelled) setNickname(me.nickname);
-        } catch {
-          // 무시
-        }
+        const [me, petRes] = await Promise.all([
+          getMe().catch(() => null),
+          getMyPet().catch((e) => {
+            if (e instanceof ApiError && e.status === 404) return null;
+            console.log("[profile] pet fetch failed:", e);
+            return null;
+          }),
+        ]);
+        if (cancelled) return;
+        if (me) setNickname(me.nickname);
+        if (petRes) setPet(petRes);
       })();
       return () => {
         cancelled = true;
       };
     }, []),
   );
+
+  const streak = pet?.streak ?? 0;
 
   const handleLogout = async () => {
     const ok = await confirm({
@@ -130,7 +148,7 @@ export default function ProfileScreen() {
                   연속 복약{" "}
                 </AppText>
                 <AppText type="extrabold" style={styles.streakNum}>
-                  90
+                  {streak}
                 </AppText>
                 <AppText type="pretendard-m" style={styles.streakLabel}>
                   일
@@ -146,7 +164,7 @@ export default function ProfileScreen() {
               resizeMode="contain"
             />
             <AppText type="pretendard-m" style={styles.cardDate}>
-              2026.04.28
+              {formatToday()}
             </AppText>
           </View>
         </View>

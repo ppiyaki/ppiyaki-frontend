@@ -23,6 +23,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -82,6 +83,15 @@ export default function PrescriptionReviewScreen() {
     setLoading(true);
     try {
       const data = await getPrescription(prescriptionId);
+      if (__DEV__) {
+        console.log("[prescription] detail received:", {
+          id: data.id,
+          status: data.status,
+          maskedImageUrl: data.maskedImageUrl,
+          hasMaskedImageUrl: typeof data.maskedImageUrl === "string",
+          candidatesCount: data.candidates.length,
+        });
+      }
       setDetail(data);
     } finally {
       setLoading(false);
@@ -361,6 +371,34 @@ export default function PrescriptionReviewScreen() {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
+        {detail.maskedImageUrl && (
+          <View style={styles.imageCard}>
+            <AppText type="pretendard-b" style={styles.imageCardTitle}>
+              처방전 원본
+            </AppText>
+            <Image
+              source={{ uri: detail.maskedImageUrl }}
+              style={styles.prescriptionImage}
+              resizeMode="contain"
+              onLoadStart={() =>
+                console.log("[prescription] image load start:", detail.maskedImageUrl)
+              }
+              onLoad={() => console.log("[prescription] image loaded OK")}
+              onError={(e) =>
+                console.log(
+                  "[prescription] image load FAILED:",
+                  e.nativeEvent,
+                  "url:",
+                  detail.maskedImageUrl,
+                )
+              }
+            />
+            <AppText type="pretendard-m" style={styles.imageCardHint}>
+              개인정보는 자동 마스킹되어 있어요
+            </AppText>
+          </View>
+        )}
+
         {detail.candidates.map((c) => (
           <CandidateCard
             key={c.id}
@@ -435,8 +473,7 @@ function CandidateCard({
   const decided = candidate.caregiverDecision;
   const display =
     candidate.matchedItemName ?? candidate.extractedName ?? "이름 미확인";
-  const showSlotPicker = decided === "PENDING" || decided !== "REJECTED";
-  const showAmountPicker = decided !== "REJECTED";
+  const notRejected = decided !== "REJECTED";
 
   return (
     <View
@@ -475,7 +512,7 @@ function CandidateCard({
         </View>
       </View>
 
-      {showAmountPicker && (
+      {notRejected && (
         <View style={styles.amountBox}>
           <AppText type="pretendard-b" style={styles.amountTitle}>
             잔여분 / 총량
@@ -503,7 +540,7 @@ function CandidateCard({
         </View>
       )}
 
-      {showSlotPicker && decided !== "REJECTED" && (
+      {notRejected && (
         <View style={styles.slotPickerBox}>
           <AppText type="pretendard-b" style={styles.slotPickerTitle}>
             복용 시간대 선택
@@ -639,6 +676,7 @@ function AmountField({
         editable={editable}
         keyboardType="number-pad"
         maxLength={4}
+        allowFontScaling={false}
         style={[
           styles.amountInput,
           !editable && { backgroundColor: "#F4F2EA", color: "#888" },
@@ -710,6 +748,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
     gap: 10,
+  },
+  imageCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: "#F1ECDB",
+    gap: 10,
+    alignItems: "center",
+  },
+  imageCardTitle: {
+    fontSize: 15,
+    color: "#222",
+    alignSelf: "flex-start",
+  },
+  prescriptionImage: {
+    width: "100%",
+    aspectRatio: 3 / 4,
+    borderRadius: 12,
+    backgroundColor: "#F4F2EA",
+  },
+  imageCardHint: {
+    fontSize: 12,
+    color: "#888",
+    alignSelf: "flex-start",
   },
   card: {
     backgroundColor: "#FFF",
@@ -785,9 +849,11 @@ const styles = StyleSheet.create({
   },
   amountInput: {
     flex: 1,
-    height: 36,
+    height: 44,
     paddingHorizontal: 10,
-    fontSize: 14,
+    paddingVertical: 0,
+    fontSize: 15,
+    lineHeight: 20,
     fontFamily: "Pretendard-Bold",
     color: "#222",
     backgroundColor: "#FAFAF6",
@@ -795,6 +861,8 @@ const styles = StyleSheet.create({
     borderColor: "#F1ECDB",
     borderRadius: 8,
     textAlign: "center",
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
   amountSlash: {
     fontSize: 16,

@@ -1,5 +1,8 @@
 import AppText from "@/components/app-text";
+import { PET_STAGES, stageIndex } from "@/data/pet-stages";
+import { ApiError } from "@/services/api";
 import { getMe } from "@/services/auth";
+import { PetMe, getMyPet } from "@/services/pets";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -59,23 +62,35 @@ const MENU_ITEMS: MenuItem[] = [
 export default function HomeScreen() {
   const router = useRouter();
   const [nickname, setNickname] = useState<string>("");
+  const [pet, setPet] = useState<PetMe | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       void (async () => {
-        try {
-          const me = await getMe();
-          if (!cancelled) setNickname(me.nickname);
-        } catch {
-          // 무시
-        }
+        const [me, petRes] = await Promise.all([
+          getMe().catch(() => null),
+          getMyPet().catch((e) => {
+            if (e instanceof ApiError && e.status === 404) return null;
+            console.log("[home] pet fetch failed:", e);
+            return null;
+          }),
+        ]);
+        if (cancelled) return;
+        if (me) setNickname(me.nickname);
+        if (petRes) setPet(petRes);
       })();
       return () => {
         cancelled = true;
       };
     }, []),
   );
+
+  const streak = pet?.streak ?? 0;
+  const point = pet?.point ?? 0;
+  const currentStage = pet
+    ? PET_STAGES[stageIndex(pet.stage)]
+    : PET_STAGES[0];
 
   return (
     <SafeAreaView
@@ -91,7 +106,7 @@ export default function HomeScreen() {
         />
         <View style={styles.pointsBadge}>
           <AppText type="pretendard-b" style={styles.pointsText}>
-            900
+            {point}
           </AppText>
           <MaterialCommunityIcons
             name="egg-outline"
@@ -112,7 +127,7 @@ export default function HomeScreen() {
       <View style={styles.characterSection}>
         <View style={styles.characterWrap}>
           <Image
-            source={require("../../assets/images/character/Senior3.png")}
+            source={currentStage.image}
             style={styles.characterImg}
             resizeMode="contain"
           />
@@ -147,7 +162,7 @@ export default function HomeScreen() {
             연속 복약{" "}
           </AppText>
           <AppText type="extrabold" style={styles.streakNum}>
-            90
+            {streak}
           </AppText>
           <AppText type="pretendard-m" style={styles.streakUnit}>
             일
