@@ -1,5 +1,6 @@
 import * as KakaoLogin from "@react-native-seoul/kakao-login";
 import { apiFetch } from "./api";
+import { clearChatCache } from "./chat";
 import { tearDownPush } from "./push-notifications";
 import {
   clearTokens,
@@ -50,6 +51,7 @@ export async function loginWithKakao(): Promise<AuthResponse> {
   });
 
   await saveTokens(data.accessToken, data.refreshToken);
+  clearMeCache();
   return data;
 }
 
@@ -68,6 +70,7 @@ export async function loginWithInviteCode(
     json: { code },
   });
   await saveTokens(data.accessToken, data.refreshToken);
+  clearMeCache();
   return data;
 }
 
@@ -87,6 +90,7 @@ export async function loginLocal(
     json: { loginId, password },
   });
   await saveTokens(data.accessToken, data.refreshToken);
+  clearMeCache();
   return data;
 }
 
@@ -128,7 +132,7 @@ export interface OnboardingBody {
 
 export interface OnboardingResponse {
   caregiverNickname: string;
-  seniors: {
+  responses: {
     seniorId: number;
     nickname: string;
     petId: number;
@@ -166,6 +170,8 @@ export async function getMe(force = false): Promise<MeResponse> {
 
 export function clearMeCache() {
   cachedMe = null;
+  // 인증 세션 전환 시 채팅 캐시도 같이 무효화 (보호자→시니어 등)
+  clearChatCache();
 }
 
 /**

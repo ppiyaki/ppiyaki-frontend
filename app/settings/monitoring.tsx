@@ -67,7 +67,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       {
         key: "medicationCompleteEnabled",
         label: "복약 완료 축하 알림",
-        description: "어르신이 복약을 완료하면 알림이 와요",
+        description: "시니어가 복약을 완료하면 알림이 와요",
       },
       {
         key: "durWarningEnabled",
@@ -85,7 +85,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       {
         key: "familySafetyEnabled",
         label: "앱 미접속 알림",
-        description: "어르신이 일정 시간 앱을 안 켜시면 알림을 받아요",
+        description: "시니어가 일정 시간 앱을 안 켜시면 알림을 받아요",
       },
     ],
   },
@@ -306,7 +306,10 @@ export default function MonitoringSettingsScreen() {
               <View key={group.title} style={styles.section}>
                 <View style={styles.groupTitleRow}>
                   <View
-                    style={[styles.groupIcon, { backgroundColor: group.iconBg }]}
+                    style={[
+                      styles.groupIcon,
+                      { backgroundColor: group.iconBg },
+                    ]}
                   >
                     {group.icon.family === "material" ? (
                       <MaterialCommunityIcons
@@ -342,10 +345,7 @@ export default function MonitoringSettingsScreen() {
                         >
                           {row.label}
                         </AppText>
-                        <AppText
-                          type="pretendard-m"
-                          style={styles.settingDesc}
-                        >
+                        <AppText type="pretendard-m" style={styles.settingDesc}>
                           {row.description}
                         </AppText>
                         {row.key === "medicationDelayEnabled" &&
@@ -381,10 +381,7 @@ export default function MonitoringSettingsScreen() {
                                 )
                               }
                               onIncrement={() =>
-                                adjustThreshold(
-                                  "familySafetyThresholdHours",
-                                  1,
-                                )
+                                adjustThreshold("familySafetyThresholdHours", 1)
                               }
                             />
                           )}
@@ -402,9 +399,7 @@ export default function MonitoringSettingsScreen() {
             <View style={styles.note}>
               <Ionicons name="information-circle" size={16} color="#888" />
               <AppText type="pretendard-m" style={styles.noteText}>
-                {saving
-                  ? "저장 중…"
-                  : "설정 변경 사항은 자동으로 저장돼요"}
+                {saving ? "저장 중…" : "설정 변경 사항은 자동으로 저장돼요"}
               </AppText>
             </View>
           </>

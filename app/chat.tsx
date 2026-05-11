@@ -1,6 +1,8 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import {
+  ChatMessage,
+  chatCache,
   createChatSession,
   streamSessionPhotoMessage,
   streamSessionTextMessage,
@@ -31,10 +33,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type Message =
-  | { id: string; role: "user"; text?: string; imageUri?: string; time: string }
-  | { id: string; role: "ai"; text: string; time: string };
-
 function formatTime(d: Date): string {
   const h = d.getHours();
   const m = String(d.getMinutes()).padStart(2, "0");
@@ -43,21 +41,12 @@ function formatTime(d: Date): string {
   return `${ampm} ${h12}:${m}`;
 }
 
-// 모듈 레벨 캐시 — 화면 재진입 시에도 대화 유지 (앱 reload/로그아웃까진 유지)
-let cachedMessages: Message[] = [];
-let cachedSessionId: number | null = null;
-
-export function clearChatCache() {
-  cachedMessages = [];
-  cachedSessionId = null;
-}
-
 export default function ChatScreen() {
-  const [messages, setMessages] = useState<Message[]>(cachedMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(chatCache.messages);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [sessionId, setSessionId] = useState<number | null>(cachedSessionId);
+  const [sessionId, setSessionId] = useState<number | null>(chatCache.sessionId);
   const [inputOpen, setInputOpen] = useState(false);
   const [inputText, setInputText] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -94,10 +83,10 @@ export default function ChatScreen() {
 
   // messages/session 변경 시 캐시 갱신
   useEffect(() => {
-    cachedMessages = messages;
+    chatCache.messages = messages;
   }, [messages]);
   useEffect(() => {
-    cachedSessionId = sessionId;
+    chatCache.sessionId = sessionId;
   }, [sessionId]);
 
   // 세션이 없을 때만 새로 생성
@@ -582,7 +571,7 @@ export default function ChatScreen() {
 function UserMessage({
   message,
 }: {
-  message: Extract<Message, { role: "user" }>;
+  message: Extract<ChatMessage, { role: "user" }>;
 }) {
   return (
     <View style={styles.userRow}>
@@ -615,7 +604,7 @@ function AiMessage({
   streaming,
   onSpeak,
 }: {
-  message: Extract<Message, { role: "ai" }>;
+  message: Extract<ChatMessage, { role: "ai" }>;
   speaking: boolean;
   streaming: boolean;
   onSpeak: () => void;

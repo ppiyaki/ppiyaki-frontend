@@ -2,10 +2,7 @@ import AppText from "@/components/app-text";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
 import { logoutKakao } from "@/services/auth";
-import {
-  InviteCodeResponse,
-  issueInviteCode,
-} from "@/services/care-relations";
+import { InviteCodeResponse, issueInviteCode } from "@/services/care-relations";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -183,10 +180,7 @@ export default function FamilyProfileScreen() {
         </View>
       </ScrollView>
 
-      <InviteCodeModal
-        senior={inviteSenior}
-        onClose={closeInviteModal}
-      />
+      <InviteCodeModal senior={inviteSenior} onClose={closeInviteModal} />
     </SafeAreaView>
   );
 }
@@ -257,7 +251,7 @@ function InviteCodeModal({
           </View>
 
           <AppText type="pretendard-m" style={styles.modalDesc}>
-            아래 코드를 어르신께 알려드리세요.{"\n"}
+            아래 코드를 시니어에게 알려드리세요.{"\n"}
             발급 후 10분간 유효해요.
           </AppText>
 

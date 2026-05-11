@@ -8,13 +8,12 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   ImageSourcePropType,
   Pressable,
   ScrollView,
   StyleSheet,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -175,7 +174,7 @@ export default function FamilyHomeScreen() {
                 검토 대기 처방전 {pendingCount}건
               </AppText>
               <AppText type="pretendard-m" style={styles.pendingDesc}>
-                어르신이 등록한 처방전을 확인해주세요
+                시니어가 등록한 처방전을 확인해주세요
               </AppText>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#F8B835" />
@@ -242,9 +241,7 @@ export default function FamilyHomeScreen() {
                 <View
                   style={[
                     styles.weekDot,
-                    idx < streakDays
-                      ? styles.weekDotOn
-                      : styles.weekDotOff,
+                    idx < streakDays ? styles.weekDotOn : styles.weekDotOff,
                   ]}
                 />
               </View>
@@ -284,11 +281,7 @@ export default function FamilyHomeScreen() {
               ]}
             >
               <View style={styles.medThumb}>
-                <MaterialCommunityIcons
-                  name="pill"
-                  size={26}
-                  color="#F8B835"
-                />
+                <MaterialCommunityIcons name="pill" size={26} color="#F8B835" />
               </View>
               <View style={{ flex: 1 }}>
                 <AppText
@@ -300,7 +293,9 @@ export default function FamilyHomeScreen() {
                 </AppText>
                 <AppText type="pretendard-m" style={styles.medRemaining}>
                   잔여 {firstMedicine.remainingAmount}일분
-                  {medicines.length > 1 ? ` · 외 ${medicines.length - 1}종` : ""}
+                  {medicines.length > 1
+                    ? ` · 외 ${medicines.length - 1}종`
+                    : ""}
                 </AppText>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#BBB" />

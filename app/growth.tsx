@@ -1,11 +1,14 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { Badge, BADGES } from "@/data/badges";
+import { ApiError } from "@/services/api";
 import { getMe } from "@/services/auth";
+import { getMyPet, PetMe, PetStage } from "@/services/pets";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   ImageSourcePropType,
   Pressable,
@@ -18,67 +21,97 @@ import { SafeAreaView } from "react-native-safe-area-context";
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
 interface Stage {
-  key: string;
+  key: PetStage;
   label: string;
   image: ImageSourcePropType;
   threshold: number;
+  /** {name} 자리에 시니어 닉네임이 들어감 */
+  message: string;
 }
 
 const STAGES: Stage[] = [
   {
-    key: "egg",
+    key: "EGG",
     label: "알",
     image: require("../assets/images/character/Senior1.png"),
     threshold: 0,
+    message: "{name}님, 저와 함께 건강한 습관을 만들어봐요!",
   },
   {
-    key: "cracked",
+    key: "CRACKED_EGG",
     label: "금 간 알",
     image: require("../assets/images/character/Senior2.png"),
     threshold: 3,
+    message: "조금만 더 힘내세요!\n곧 세상 밖으로 나갈 것 같아요!",
   },
   {
-    key: "baby",
+    key: "BABY",
     label: "아기 삐약이",
     image: require("../assets/images/character/Senior3.png"),
     threshold: 7,
+    message: "덕분에 제가 태어났어요!\n우리 계속 같이 힘내요!",
   },
   {
-    key: "healthy",
+    key: "HEALTHY",
     label: "건강 삐약이",
     image: require("../assets/images/character/Senior4.png"),
     threshold: 14,
+    message: "이제 저도 건강해졌어요.\n{name}님도 몸이 가뿐하시죠?",
   },
   {
-    key: "guardian",
+    key: "GUARDIAN",
     label: "수호 삐약이",
     image: require("../assets/images/character/Senior5.png"),
     threshold: 30,
+    message: "{name}은 진정한 건강 왕!\n제가 계속 지켜드릴게요.",
   },
   {
-    key: "emperor",
+    key: "EMPEROR",
     label: "황제 삐약이",
     image: require("../assets/images/character/Senior6.png"),
     threshold: 100,
+    message: "{name}님의 꾸준함은 정말 멋져요!\n당신을 존경합니다.",
   },
 ];
 
-const STREAK_DAYS = 90;
-const EGG_COUNT = 900;
+function formatStageMessage(template: string, name: string): string {
+  const safeName = name.trim().length > 0 ? name : "어르신";
+  return template.replaceAll("{name}", safeName);
+}
 
 export default function GrowthScreen() {
   const router = useRouter();
   const [nickname, setNickname] = useState<string>("");
+  const [pet, setPet] = useState<PetMe | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [petMissing, setPetMissing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       void (async () => {
+        setLoading(true);
         try {
-          const me = await getMe();
-          if (!cancelled) setNickname(me.nickname);
-        } catch {
-          // 무시
+          const [me, petRes] = await Promise.all([
+            getMe().catch(() => null),
+            getMyPet().catch((e) => {
+              if (e instanceof ApiError && e.status === 404) {
+                setPetMissing(true);
+                return null;
+              }
+              throw e;
+            }),
+          ]);
+          if (cancelled) return;
+          if (me) setNickname(me.nickname);
+          if (petRes) {
+            setPet(petRes);
+            setPetMissing(false);
+          }
+        } catch (e) {
+          console.log("[growth] load failed:", e);
+        } finally {
+          if (!cancelled) setLoading(false);
         }
       })();
       return () => {
@@ -87,13 +120,16 @@ export default function GrowthScreen() {
     }, []),
   );
 
-  const currentStageIdx = getCurrentStageIdx(STREAK_DAYS);
-  const currentStage = STAGES[currentStageIdx];
-  const nextStage = STAGES[currentStageIdx + 1];
-  const progress = nextStage
-    ? Math.min(STREAK_DAYS / nextStage.threshold, 1)
-    : 1;
-  const daysLeft = nextStage ? nextStage.threshold - STREAK_DAYS : 0;
+  const streak = pet?.streak ?? 0;
+  const point = pet?.point ?? 0;
+  const currentStageIdx = pet
+    ? STAGES.findIndex((s) => s.key === pet.stage)
+    : getCurrentStageIdx(streak);
+  const safeIdx = currentStageIdx < 0 ? 0 : currentStageIdx;
+  const currentStage = STAGES[safeIdx];
+  const nextStage = STAGES[safeIdx + 1];
+  const progress = nextStage ? Math.min(streak / nextStage.threshold, 1) : 1;
+  const daysLeft = nextStage ? Math.max(nextStage.threshold - streak, 0) : 0;
 
   return (
     <SafeAreaView
@@ -106,173 +142,205 @@ export default function GrowthScreen() {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        {/* 현재 단계 카드 */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroTop}>
-            <View style={styles.bubble}>
-              <AppText type="pretendard-b" style={styles.bubbleText}>
-                {STREAK_DAYS}일째{"\n"}함께하고 있어요!
-              </AppText>
-            </View>
-            <Image
-              source={currentStage.image}
-              style={styles.heroChar}
-              resizeMode="contain"
-            />
+        {loading && !pet && (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#FFD24D" />
           </View>
-          <View style={styles.heroInfo}>
-            <AppText type="pretendard-b" style={styles.heroTitle}>
-              {currentStage.label}
-            </AppText>
-            <AppText type="pretendard-m" style={styles.heroDesc}>
-              {nickname ? `${nickname}님은 진정한 건강 왕!` : "진정한 건강 왕!"}
-              {"\n"}삐약이가 계속 지켜드릴게요.
-            </AppText>
-          </View>
+        )}
 
-          <View style={styles.statRow}>
-            <StatBox
-              icon="calendar"
-              iconColor="#5BC4AE"
-              iconBg="#D6F1EA"
-              label="연속 복약"
-              value={`${STREAK_DAYS}`}
-              unit="일"
-              valueColor="#5BC4AE"
-            />
-            <StatBox
-              materialIcon="egg-outline"
-              iconColor="#F8B835"
-              iconBg="#FFF1C8"
-              label="보유 알"
-              value={`${EGG_COUNT}`}
-              unit="개"
-              valueColor="#F8B835"
-            />
-          </View>
-        </View>
-
-        {/* 다음 성장 단계 */}
-        <View style={styles.section}>
-          <AppText type="pretendard-b" style={styles.sectionTitle}>
-            다음 성장 단계
-          </AppText>
-          <View style={styles.stageCard}>
-            {nextStage ? (
-              <AppText type="pretendard-m" style={styles.stageCaption}>
-                {nextStage.label}까지{" "}
-                <AppText type="extrabold" style={styles.stageCaptionNum}>
-                  {daysLeft}일
-                </AppText>{" "}
-                남았어요
-              </AppText>
-            ) : (
-              <AppText type="pretendard-m" style={styles.stageCaption}>
-                최고 단계에 도달했어요!
-              </AppText>
-            )}
-
-            <View style={styles.progressRow}>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[styles.progressFill, { width: `${progress * 100}%` }]}
+        {!loading && (
+          <>
+            {/* 현재 단계 카드 */}
+            <View style={styles.heroCard}>
+              <View style={styles.heroTop}>
+                <View style={styles.bubble}>
+                  <AppText type="pretendard-b" style={styles.bubbleText}>
+                    {streak}일째{"\n"}함께하고 있어요!
+                  </AppText>
+                </View>
+                <Image
+                  source={currentStage.image}
+                  style={styles.heroChar}
+                  resizeMode="contain"
                 />
               </View>
-              <AppText type="pretendard-b" style={styles.progressLabel}>
-                {STREAK_DAYS}
-                <AppText type="pretendard-r" style={styles.progressTotal}>
-                  /{nextStage?.threshold ?? STREAK_DAYS}일
+              <View style={styles.heroInfo}>
+                <View style={styles.levelChip}>
+                  <MaterialCommunityIcons
+                    name="star-four-points"
+                    size={12}
+                    color="#F8B835"
+                  />
+                  <AppText type="pretendard-b" style={styles.levelChipText}>
+                    Lv. {pet?.level ?? 0}
+                  </AppText>
+                </View>
+                <AppText type="pretendard-b" style={styles.heroTitle}>
+                  {currentStage.label}
                 </AppText>
-              </AppText>
+                <AppText type="pretendard-m" style={styles.heroDesc}>
+                  {petMissing
+                    ? "복약을 시작하면 삐약이가 깨어나요!"
+                    : formatStageMessage(currentStage.message, nickname)}
+                </AppText>
+              </View>
+
+              <View style={styles.statRow}>
+                <StatBox
+                  icon="calendar"
+                  iconColor="#5BC4AE"
+                  iconBg="#D6F1EA"
+                  label="연속 복약"
+                  value={`${streak}`}
+                  unit="일"
+                  valueColor="#5BC4AE"
+                />
+                <StatBox
+                  materialIcon="egg-outline"
+                  iconColor="#F8B835"
+                  iconBg="#FFF1C8"
+                  label="보유 알"
+                  value={`${point}`}
+                  unit="개"
+                  valueColor="#F8B835"
+                />
+              </View>
             </View>
 
-            <View style={styles.timeline}>
-              {STAGES.map((stage, idx) => {
-                const reached = idx <= currentStageIdx;
-                const isCurrent = idx === currentStageIdx;
-                return (
-                  <View key={stage.key} style={styles.timelineItem}>
+            {/* 다음 성장 단계 */}
+            <View style={styles.section}>
+              <AppText type="pretendard-b" style={styles.sectionTitle}>
+                다음 성장 단계
+              </AppText>
+              <View style={styles.stageCard}>
+                {nextStage ? (
+                  <AppText type="pretendard-m" style={styles.stageCaption}>
+                    {nextStage.label}까지{" "}
+                    <AppText type="extrabold" style={styles.stageCaptionNum}>
+                      {daysLeft}일
+                    </AppText>{" "}
+                    남았어요
+                  </AppText>
+                ) : (
+                  <AppText type="pretendard-m" style={styles.stageCaption}>
+                    최고 단계에 도달했어요!
+                  </AppText>
+                )}
+
+                <View style={styles.progressRow}>
+                  <View style={styles.progressTrack}>
                     <View
                       style={[
-                        styles.stageCircle,
-                        reached && styles.stageCircleReached,
-                        isCurrent && styles.stageCircleCurrent,
+                        styles.progressFill,
+                        { width: `${progress * 100}%` },
                       ]}
-                    >
-                      <Image
-                        source={stage.image}
-                        style={[
-                          styles.stageImg,
-                          !reached && styles.stageImgLocked,
-                        ]}
-                        resizeMode="contain"
-                      />
-                      {reached && !isCurrent && (
-                        <View style={styles.checkBadge}>
-                          <Ionicons name="checkmark" size={10} color="#FFF" />
-                        </View>
-                      )}
-                      {!reached && (
-                        <View style={styles.lockBadge}>
-                          <Ionicons name="lock-closed" size={9} color="#FFF" />
-                        </View>
-                      )}
-                    </View>
-                    <AppText
-                      type={isCurrent ? "pretendard-b" : "pretendard-m"}
-                      style={[
-                        styles.stageLabel,
-                        isCurrent && styles.stageLabelCurrent,
-                        !reached && styles.stageLabelLocked,
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {stage.label}
-                    </AppText>
+                    />
                   </View>
-                );
-              })}
-            </View>
-          </View>
-        </View>
+                  <AppText type="pretendard-b" style={styles.progressLabel}>
+                    {streak}
+                    <AppText type="pretendard-r" style={styles.progressTotal}>
+                      /{nextStage?.threshold ?? streak}일
+                    </AppText>
+                  </AppText>
+                </View>
 
-        {/* 칭찬 뱃지 */}
-        <View style={styles.section}>
-          <AppText type="pretendard-b" style={styles.sectionTitle}>
-            칭찬 뱃지
-          </AppText>
-          <View style={styles.badgeCard}>
-            <View style={styles.badgeGrid}>
-              {BADGES.slice(0, 3).map((badge) => (
-                <BadgeItem key={badge.key} badge={badge} />
-              ))}
+                <View style={styles.timeline}>
+                  {STAGES.map((stage, idx) => {
+                    const reached = idx <= currentStageIdx;
+                    const isCurrent = idx === currentStageIdx;
+                    return (
+                      <View key={stage.key} style={styles.timelineItem}>
+                        <View
+                          style={[
+                            styles.stageCircle,
+                            reached && styles.stageCircleReached,
+                            isCurrent && styles.stageCircleCurrent,
+                          ]}
+                        >
+                          <Image
+                            source={stage.image}
+                            style={[
+                              styles.stageImg,
+                              !reached && styles.stageImgLocked,
+                            ]}
+                            resizeMode="contain"
+                          />
+                          {reached && !isCurrent && (
+                            <View style={styles.checkBadge}>
+                              <Ionicons
+                                name="checkmark"
+                                size={10}
+                                color="#FFF"
+                              />
+                            </View>
+                          )}
+                          {!reached && (
+                            <View style={styles.lockBadge}>
+                              <Ionicons
+                                name="lock-closed"
+                                size={9}
+                                color="#FFF"
+                              />
+                            </View>
+                          )}
+                        </View>
+                        <AppText
+                          type={isCurrent ? "pretendard-b" : "pretendard-m"}
+                          style={[
+                            styles.stageLabel,
+                            isCurrent && styles.stageLabelCurrent,
+                            !reached && styles.stageLabelLocked,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {stage.label}
+                        </AppText>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
             </View>
-            <Pressable
-              onPress={() => router.push("/badges" as any)}
-              style={({ pressed }) => [
-                styles.badgeMore,
-                pressed && { backgroundColor: "#F4FBF9" },
-              ]}
-            >
-              <AppText type="pretendard-b" style={styles.badgeMoreText}>
-                전체 뱃지 보기
+
+            {/* 칭찬 뱃지 */}
+            <View style={styles.section}>
+              <AppText type="pretendard-b" style={styles.sectionTitle}>
+                칭찬 뱃지
               </AppText>
-              <Ionicons name="chevron-forward" size={16} color="#5BC4AE" />
-            </Pressable>
-          </View>
-        </View>
+              <View style={styles.badgeCard}>
+                <View style={styles.badgeGrid}>
+                  {BADGES.slice(0, 3).map((badge) => (
+                    <BadgeItem key={badge.key} badge={badge} />
+                  ))}
+                </View>
+                <Pressable
+                  onPress={() => router.push("/badges" as any)}
+                  style={({ pressed }) => [
+                    styles.badgeMore,
+                    pressed && { backgroundColor: "#F4FBF9" },
+                  ]}
+                >
+                  <AppText type="pretendard-b" style={styles.badgeMoreText}>
+                    전체 뱃지 보기
+                  </AppText>
+                  <Ionicons name="chevron-forward" size={16} color="#5BC4AE" />
+                </Pressable>
+              </View>
+            </View>
 
-        {/* 안내 */}
-        <View style={styles.note}>
-          <MaterialCommunityIcons
-            name="egg-outline"
-            size={18}
-            color="#F8B835"
-          />
-          <AppText type="pretendard-m" style={styles.noteText}>
-            알은 복약을 잘 챙길수록 쌓여요!
-          </AppText>
-        </View>
+            {/* 안내 */}
+            <View style={styles.note}>
+              <MaterialCommunityIcons
+                name="egg-outline"
+                size={18}
+                color="#F8B835"
+              />
+              <AppText type="pretendard-m" style={styles.noteText}>
+                알은 복약을 잘 챙길수록 쌓여요!
+              </AppText>
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -375,6 +443,7 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: 20,
   },
+  loadingBox: { paddingVertical: 80, alignItems: "center" },
 
   /* ── 현재 단계 카드 ── */
   heroCard: {
@@ -410,6 +479,21 @@ const styles = StyleSheet.create({
   heroInfo: {
     alignItems: "center",
     gap: 6,
+  },
+  levelChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FFF",
+    borderWidth: 1.5,
+    borderColor: "#FFD24D",
+  },
+  levelChipText: {
+    fontSize: 13,
+    color: "#5A4500",
   },
   heroTitle: {
     fontSize: 26,

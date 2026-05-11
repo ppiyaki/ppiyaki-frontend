@@ -10,7 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const WARNINGS = [
   "지금까지 챙긴 복약 기록과 받은 뱃지가 모두 삭제돼요",
   "삐약이의 성장 단계와 보유한 알이 사라져요",
-  "연결된 보호자가 더 이상 어르신을 돌볼 수 없게 돼요",
+  "연결된 보호자가 더 이상 시니어를 돌볼 수 없게 돼요",
   "탈퇴 후에는 정보를 되돌릴 수 없어요",
 ];
 
@@ -65,7 +65,7 @@ export default function SeniorWithdrawScreen() {
         </View>
 
         <AppText type="pretendard-m" style={styles.subText}>
-          어르신의 정보는 탈퇴 후 즉시 삭제되며,{"\n"}
+          시니어의 정보는 탈퇴 후 즉시 삭제되며,{"\n"}
           동일한 계정으로 다시 가입해도 복구할 수 없어요.
         </AppText>
       </ScrollView>

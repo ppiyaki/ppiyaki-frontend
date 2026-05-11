@@ -106,7 +106,7 @@ export default function NotificationsScreen() {
 
       // 생성된 시니어들에 대해 초대 코드 일괄 발급
       const codes = await Promise.all(
-        res.seniors.map<Promise<IssuedCode>>(async (s) => {
+        res.responses.map<Promise<IssuedCode>>(async (s) => {
           try {
             const r = await issueInviteCode(s.seniorId);
             return {

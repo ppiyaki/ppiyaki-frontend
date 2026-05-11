@@ -77,8 +77,8 @@ export default function SignupCompleteScreen() {
           가입 완료!
         </AppText>
         <AppText type="pretendard-r" style={styles.desc}>
-          아래 6자리 코드를 어르신께 알려드리세요.{"\n"}
-          어르신은 코드를 입력하면 바로 시작할 수 있어요.{"\n"}
+          아래 6자리 코드를 시니어에게 알려드리세요.{"\n"}
+          시니어는 코드를 입력하면 바로 시작할 수 있어요.{"\n"}
           코드는 발급 후 10분간 유효해요.
         </AppText>
 

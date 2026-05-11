@@ -5,6 +5,26 @@ export interface ChatSession {
   sessionId: number;
 }
 
+/* ────────── 채팅 화면 모듈 캐시 ──────────
+ * 화면 재진입 시 대화/세션 유지용. 로그인 전환·로그아웃에서 비워야 함. */
+
+export type ChatMessage =
+  | { id: string; role: "user"; text?: string; imageUri?: string; time: string }
+  | { id: string; role: "ai"; text: string; time: string };
+
+export const chatCache: {
+  messages: ChatMessage[];
+  sessionId: number | null;
+} = {
+  messages: [],
+  sessionId: null,
+};
+
+export function clearChatCache() {
+  chatCache.messages = [];
+  chatCache.sessionId = null;
+}
+
 /** 채팅 세션 생성 */
 export async function createChatSession(): Promise<ChatSession> {
   return apiFetch<ChatSession>("/api/v1/chat/sessions", {

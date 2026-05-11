@@ -165,7 +165,7 @@ export default function PrescriptionReviewScreen() {
       await confirm({
         title: "식사 시간이 필요해요",
         message:
-          "선택한 식사 시간(아침/점심/저녁)이 어르신 프로필에 설정되어 있지 않아요.\n프로필에서 식사 시간을 먼저 설정해주세요.",
+          "선택한 식사 시간(아침/점심/저녁)이 시니어 프로필에 설정되어 있지 않아요.\n프로필에서 식사 시간을 먼저 설정해주세요.",
         confirmText: "확인",
         cancelText: "닫기",
       });
@@ -383,10 +383,7 @@ export default function PrescriptionReviewScreen() {
 
         <Pressable
           onPress={handleAddManual}
-          style={({ pressed }) => [
-            styles.addBtn,
-            pressed && { opacity: 0.85 },
-          ]}
+          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
         >
           <Ionicons name="add-circle-outline" size={20} color="#5BC4AE" />
           <AppText type="pretendard-b" style={styles.addBtnText}>
@@ -550,9 +547,7 @@ function CandidateCard({
                   >
                     {SLOT_LABEL[slot]}
                   </AppText>
-                  {suggested && !on && (
-                    <View style={styles.suggestDot} />
-                  )}
+                  {suggested && !on && <View style={styles.suggestDot} />}
                 </Pressable>
               );
             })}
