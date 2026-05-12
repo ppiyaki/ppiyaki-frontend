@@ -85,10 +85,11 @@ interface Palette {
 const MISSED_GRACE_MIN = 60;
 function effectiveSlotStatus(
   status: SlotStatus,
-  mealTimeHms: string,
+  mealTimeHms: string | null | undefined,
   dateIso: string,
 ): SlotStatus {
   if (status !== "PENDING") return status;
+  if (!mealTimeHms) return status;
   const [h, m] = mealTimeHms.split(":").map((x) => parseInt(x, 10) || 0);
   const slotDate = new Date(dateIso);
   slotDate.setHours(h, m + MISSED_GRACE_MIN, 0, 0);

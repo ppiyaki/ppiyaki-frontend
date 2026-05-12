@@ -50,6 +50,14 @@ export async function loginWithKakao(): Promise<AuthResponse> {
     json: { idToken },
   });
 
+  if (__DEV__) {
+    console.log("[auth/kakao] response:", {
+      isOnboarded: data.isOnboarded,
+      hasAccessToken: !!data.accessToken,
+      hasRefreshToken: !!data.refreshToken,
+    });
+  }
+
   await saveTokens(data.accessToken, data.refreshToken);
   clearMeCache();
   return data;
@@ -147,6 +155,35 @@ export interface OnboardingResponse {
 export async function onboardCaregiver(
   body: OnboardingBody,
 ): Promise<OnboardingResponse> {
+  if (__DEV__) {
+    try {
+      const token = await (await import("./token-storage")).getAccessToken();
+      if (token) {
+        const parts = token.split(".");
+        let payload: unknown = null;
+        if (parts[1]) {
+          const b64 = parts[1]
+            .replace(/-/g, "+")
+            .replace(/_/g, "/")
+            .padEnd(parts[1].length + ((4 - (parts[1].length % 4)) % 4), "=");
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const decoded = (globalThis as any).atob(b64);
+          payload = JSON.parse(decoded);
+        }
+        console.log("[onboarding] outgoing token info:", {
+          first20: token.slice(0, 20),
+          last20: token.slice(-20),
+          length: token.length,
+          payload,
+        });
+      } else {
+        console.log("[onboarding] NO ACCESS TOKEN STORED");
+      }
+    } catch (e) {
+      console.log("[onboarding] token decode failed:", e);
+    }
+  }
+
   const res = await apiFetch<OnboardingResponse>("/api/v1/onboarding", {
     method: "POST",
     json: body,

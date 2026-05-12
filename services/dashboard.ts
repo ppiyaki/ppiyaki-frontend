@@ -86,7 +86,8 @@ export interface DailySlotMedicine {
 export interface DailySlot {
   slot: ServerMealSlot;
   status: SlotStatus;
-  mealTime: string; // "HH:mm:ss"
+  /** "HH:mm:ss" — 시니어가 mealTimes 미설정이면 null */
+  mealTime: string | null;
   takenAt: string | null; // ISO datetime
   photoUrl: string | null;
   medicines: DailySlotMedicine[];

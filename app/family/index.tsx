@@ -69,7 +69,8 @@ function getWeekStart(today: Date): string {
   return toIsoDate(d);
 }
 
-function trimMealTime(hms: string): string {
+function trimMealTime(hms: string | null | undefined): string {
+  if (!hms) return "—";
   return hms.slice(0, 5); // "HH:mm:ss" → "HH:mm"
 }
 
@@ -120,13 +121,40 @@ export default function FamilyHomeScreen() {
     useCallback(() => {
       let cancelled = false;
 
-      // 1) 본인 정보 (보호자 이름)
+      // 0) 온보딩 미완료 사용자 가드
+      // 백엔드가 isOnboarded=true 로 잘못 보내도, 실제로 닉네임이 없으면
+      // 4단계를 안 거친 상태로 간주하고 회수.
       (async () => {
         try {
-          const me = await getMe();
-          if (!cancelled) setCaregiverName(me.nickname);
-        } catch {
-          // 무시
+          const me = await getMe(true); // force=true: 캐시 무시하고 fresh fetch
+          if (cancelled) return;
+          if (__DEV__) {
+            console.log("[family-home] /me response:", {
+              id: me.id,
+              nickname: me.nickname,
+              role: me.role,
+              isOnboarded: me.isOnboarded,
+              hasIsOnboardedField: "isOnboarded" in me,
+            });
+          }
+          const noNickname =
+            me.nickname == null || me.nickname.trim().length === 0;
+          if (me.isOnboarded === false || noNickname) {
+            if (__DEV__) {
+              console.log(
+                "[family-home] onboarding incomplete → redirect (isOnboarded:",
+                me.isOnboarded,
+                "nickname:",
+                me.nickname,
+                ")",
+              );
+            }
+            router.replace("/signup/nickname" as any);
+            return;
+          }
+          setCaregiverName(me.nickname);
+        } catch (e) {
+          console.log("[family-home] getMe failed:", e);
         }
       })();
 
