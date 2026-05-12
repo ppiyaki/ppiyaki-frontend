@@ -1,10 +1,12 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
 import { getMe, logoutKakao } from "@/services/auth";
 import { PetMe, getMyPet } from "@/services/pets";
 import { Ionicons } from "@expo/vector-icons";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -41,7 +43,9 @@ function formatToday(): string {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const confirm = useConfirm();
+  useRequireAuth();
   const [nickname, setNickname] = useState<string>("");
   const [pet, setPet] = useState<PetMe | null>(null);
 
@@ -80,7 +84,13 @@ export default function ProfileScreen() {
     try {
       await logoutKakao();
     } finally {
-      router.replace("/family-login");
+      // 네비게이션 스택 완전 초기화 — 뒤로가기로 시니어 메인에 돌아오지 못하게.
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: "select-role" }],
+        }),
+      );
     }
   };
 

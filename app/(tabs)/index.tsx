@@ -1,5 +1,7 @@
 import AppText from "@/components/app-text";
 import { PET_STAGES, stageIndex } from "@/data/pet-stages";
+import { useExitOnBack } from "@/hooks/use-exit-on-back";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
 import { getMe } from "@/services/auth";
 import { listNotifications } from "@/services/notifications";
@@ -62,6 +64,8 @@ const MENU_ITEMS: MenuItem[] = [
 
 export default function HomeScreen() {
   const router = useRouter();
+  useRequireAuth();
+  useExitOnBack();
   const [nickname, setNickname] = useState<string>("");
   const [pet, setPet] = useState<PetMe | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
@@ -89,7 +93,7 @@ export default function HomeScreen() {
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [router]),
   );
 
   const streak = pet?.streak ?? 0;

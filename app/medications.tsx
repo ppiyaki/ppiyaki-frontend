@@ -1,5 +1,6 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
 import {
   describeDaysOfWeek,
@@ -59,6 +60,7 @@ const SLOT_BG: Record<MealSlot, string> = {
 };
 
 export default function MedicationsScreen() {
+  useRequireAuth();
   const router = useRouter();
   const [items, setItems] = useState<MedicineWithSchedules[]>([]);
   const [loading, setLoading] = useState(true);

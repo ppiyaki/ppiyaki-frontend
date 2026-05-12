@@ -2,7 +2,7 @@ import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,7 +15,7 @@ const WARNINGS = [
 ];
 
 export default function SeniorWithdrawScreen() {
-  const router = useRouter();
+  const navigation = useNavigation();
   const confirm = useConfirm();
   const [agreed, setAgreed] = useState(false);
 
@@ -29,7 +29,13 @@ export default function SeniorWithdrawScreen() {
     });
     if (!ok) return;
     // TODO: 탈퇴 API 연결
-    router.replace("/select-role" as any);
+    // 네비게이션 스택 완전 초기화 — 뒤로가기로 탈퇴된 계정 화면에 못 돌아오게.
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: "select-role" }],
+      }),
+    );
   };
 
   return (

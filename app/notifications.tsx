@@ -1,5 +1,6 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
 import {
   NotificationCategory,
@@ -66,6 +67,7 @@ const CATEGORY_META: Record<
 };
 
 export default function NotificationsScreen() {
+  useRequireAuth();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [cursor, setCursor] = useState<number | null>(null);
   const [hasNext, setHasNext] = useState(false);

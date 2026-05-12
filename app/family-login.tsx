@@ -3,6 +3,7 @@ import KakaoLoginButton from "@/components/kakao-login-button";
 import { ApiError } from "@/services/api";
 import { loginLocal, loginWithKakao } from "@/services/auth";
 import { resolveAuthRoute, ROUTE_PATHS } from "@/services/post-login";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -86,6 +87,24 @@ export default function FamilyLoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* 상단 — 뒤로가기 */}
+          <View style={styles.topBar}>
+            <Pressable
+              onPress={() => router.replace("/select-role" as any)}
+              hitSlop={10}
+              style={({ pressed }) => [
+                styles.backBtn,
+                pressed && { opacity: 0.6 },
+              ]}
+            >
+              <Ionicons name="chevron-back" size={22} color="#333" />
+              <AppText type="pretendard-m" style={styles.backText}>
+                돌아가기
+              </AppText>
+            </Pressable>
+          </View>
+
+          {/* 로고 — 상단 영역 */}
           <View style={styles.logoBox}>
             <Image
               source={require("../assets/images/logo.png")}
@@ -93,6 +112,9 @@ export default function FamilyLoginScreen() {
               resizeMode="contain"
             />
           </View>
+
+          {/* spacer — 로그인 컴포넌트들을 아래로 밀어내림 */}
+          <View style={styles.spacer} />
 
           {/* 로컬 로그인 폼 */}
           <View style={styles.formBox}>
@@ -146,16 +168,17 @@ export default function FamilyLoginScreen() {
           </View>
 
           <KakaoLoginButton onPress={handleKakaoLogin} loading={loading} />
-
-          <View style={styles.signupRow}>
-            <AppText type="pretendard-r" style={styles.signupText}>
-              아직 계정이 없어요{"  "}
-            </AppText>
-            <Pressable onPress={() => router.push("/family-signup" as any)}>
-              <AppText type="pretendard-b" style={styles.signupLink}>
-                {">"} 회원가입하기
+          <View style={styles.signup}>
+            <View style={styles.signupRow}>
+              <AppText type="pretendard-r" style={styles.signupText}>
+                아직 계정이 없어요{"  "}
               </AppText>
-            </Pressable>
+              <Pressable onPress={() => router.push("/family-signup" as any)}>
+                <AppText type="pretendard-b" style={styles.signupLink}>
+                  {">"} 회원가입하기
+                </AppText>
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -170,25 +193,37 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    alignItems: "center",
+    alignItems: "stretch",
     paddingHorizontal: 24,
-    paddingTop: 64,
-    paddingBottom: 40,
+    paddingTop: 8,
+    paddingBottom: 32,
+  },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  backText: {
+    fontSize: 15,
+    color: "#333",
   },
   logoBox: {
-    width: 180,
-    height: 80,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#D8C88A",
-    justifyContent: "center",
+    width: "100%",
     alignItems: "center",
-    backgroundColor: "#FDFCF3",
-    marginBottom: 40,
+    marginTop: 40,
   },
   logoImg: {
-    width: 156,
-    height: 64,
+    width: 200,
+    height: 80,
+  },
+  spacer: {
+    flex: 1,
+    minHeight: 24,
   },
 
   formBox: {
@@ -197,7 +232,7 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 52,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#D8C88A",
     backgroundColor: "#FDFCF3",
@@ -208,7 +243,7 @@ const styles = StyleSheet.create({
   },
   loginBtn: {
     height: 52,
-    borderRadius: 12,
+    borderRadius: 8,
     backgroundColor: "#FFD24D",
     justifyContent: "center",
     alignItems: "center",
@@ -238,7 +273,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#888",
   },
-
+  signup: {
+    alignItems: "center",
+    marginTop: 12,
+  },
   signupRow: {
     flexDirection: "row",
     alignItems: "center",

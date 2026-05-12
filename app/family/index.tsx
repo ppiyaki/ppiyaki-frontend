@@ -1,5 +1,7 @@
 import AppText from "@/components/app-text";
 import SeniorSummaryHeader from "@/components/senior-summary-header";
+import { useExitOnBack } from "@/hooks/use-exit-on-back";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 import { getMe } from "@/services/auth";
 import { LinkedSenior, resolveLinkedSenior } from "@/services/caregivers";
 import {
@@ -109,6 +111,8 @@ function calcStreakFromWeekly(weekly: WeeklyDashboard): number {
 
 export default function FamilyHomeScreen() {
   const router = useRouter();
+  useRequireAuth();
+  useExitOnBack();
 
   const [pendingCount, setPendingCount] = useState(0);
   const [senior, setSenior] = useState<LinkedSenior | null>(null);

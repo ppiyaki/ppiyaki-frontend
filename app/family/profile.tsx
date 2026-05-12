@@ -1,5 +1,6 @@
 import AppText from "@/components/app-text";
 import { useConfirm } from "@/contexts/confirm-context";
+import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
 import { getMe, logoutKakao } from "@/services/auth";
 import { InviteCodeResponse, issueInviteCode } from "@/services/care-relations";
@@ -9,6 +10,7 @@ import {
   unlinkSenior,
 } from "@/services/caregivers";
 import { Ionicons } from "@expo/vector-icons";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -30,7 +32,9 @@ const PLACEHOLDER_EMAIL = "이메일 미연동";
 
 export default function FamilyProfileScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const confirm = useConfirm();
+  useRequireAuth();
 
   const [nickname, setNickname] = useState<string>("");
   const [seniors, setSeniors] = useState<LinkedSenior[]>([]);
@@ -79,7 +83,13 @@ export default function FamilyProfileScreen() {
     try {
       await logoutKakao();
     } finally {
-      router.replace("/family-login");
+      // 네비게이션 스택 완전 초기화 — 뒤로가기로 보호자 메인에 돌아오지 못하게.
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: "family-login" }],
+        }),
+      );
     }
   };
 
