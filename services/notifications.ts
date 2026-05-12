@@ -28,19 +28,32 @@ export interface NotificationListResponse {
 /**
  * 본인 알림함 cursor 페이징 조회.
  * cursor 미지정 시 최신부터, size 미지정 시 20.
+ *
+ * 백엔드는 명세상 isRead 필드를 보내야 하지만 실제로는 readAt 만 응답함.
+ * 여기서 isRead = (readAt !== null) 로 derive 해서 프론트가 일관되게 쓸 수 있게.
  */
 export async function listNotifications(params?: {
   category?: NotificationCategory;
   cursor?: number;
   size?: number;
 }): Promise<NotificationListResponse> {
-  return apiFetch<NotificationListResponse>("/api/v1/notifications", {
-    query: {
-      category: params?.category,
-      cursor: params?.cursor,
-      size: params?.size,
+  const res = await apiFetch<NotificationListResponse>(
+    "/api/v1/notifications",
+    {
+      query: {
+        category: params?.category,
+        cursor: params?.cursor,
+        size: params?.size,
+      },
     },
-  });
+  );
+  return {
+    ...res,
+    responses: res.responses.map((n) => ({
+      ...n,
+      isRead: n.readAt !== null && n.readAt !== undefined,
+    })),
+  };
 }
 
 /**

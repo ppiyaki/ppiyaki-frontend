@@ -301,6 +301,26 @@ export default function MonitoringSettingsScreen() {
                   desc="지연 30분 / 미접속 12시간"
                 />
               </View>
+              {inferredPreset === null && (
+                <View style={styles.customBadge}>
+                  <Ionicons
+                    name="options"
+                    size={16}
+                    color="#4799E0"
+                  />
+                  <View style={{ flex: 1 }}>
+                    <AppText type="pretendard-b" style={styles.customBadgeTitle}>
+                      커스텀 알림
+                    </AppText>
+                    <AppText type="pretendard-r" style={styles.customBadgeDesc}>
+                      세부 항목을 직접 조정한 상태예요
+                    </AppText>
+                  </View>
+                  <View style={styles.customCheck}>
+                    <Ionicons name="checkmark" size={12} color="#FFF" />
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* 세부 토글 */}
@@ -597,6 +617,34 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  customBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#4799E0",
+    backgroundColor: "#EFF6FC",
+  },
+  customBadgeTitle: {
+    fontSize: 14,
+    color: "#222",
+  },
+  customBadgeDesc: {
+    fontSize: 11,
+    color: "#5A789B",
+    marginTop: 2,
+  },
+  customCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#4799E0",
     justifyContent: "center",
     alignItems: "center",
   },

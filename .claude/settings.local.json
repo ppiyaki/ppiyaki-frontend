@@ -6,7 +6,9 @@
       "Bash(npx expo *)",
       "Bash(npx tsc *)",
       "Bash(Select-String -Pattern \"\\(signup|notifications|complete|seniors|nickname|family-onboarding\\)\" -SimpleMatch)",
-      "PowerShell(npx tsc --noEmit 2>&1)"
+      "PowerShell(npx tsc --noEmit 2>&1)",
+      "Bash(npx eas-cli *)",
+      "Bash(xargs grep -l \"kotlin\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\cjy03\\Ppiyaki\\services"
