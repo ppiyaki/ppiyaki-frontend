@@ -9,12 +9,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function DoseConfirmIssueScreen() {
   const router = useRouter();
   const confirm = useConfirm();
-  const { uri, attempts, scheduleId, targetDate } = useLocalSearchParams<{
-    uri?: string;
-    attempts?: string;
-    scheduleId?: string;
-    targetDate?: string;
-  }>();
+  const { uri, attempts, scheduleId, targetDate, errorMessage } =
+    useLocalSearchParams<{
+      uri?: string;
+      attempts?: string;
+      scheduleId?: string;
+      targetDate?: string;
+      errorMessage?: string;
+    }>();
 
   const attemptCount = Number(attempts ?? "1");
   const showFamilyHelp = attemptCount >= 2;
@@ -60,14 +62,18 @@ export default function DoseConfirmIssueScreen() {
         </View>
 
         <AppText type="extrabold" style={styles.title}>
-          {showFamilyHelp
-            ? "약 확인이 잘 안 되네요"
-            : "약 개수가 조금 다른 것 같아요"}
+          {errorMessage
+            ? "복약 인증에 실패했어요"
+            : showFamilyHelp
+              ? "약 확인이 잘 안 되네요"
+              : "약 개수가 조금 다른 것 같아요"}
         </AppText>
         <AppText type="pretendard-m" style={styles.desc}>
-          {showFamilyHelp
-            ? "사진을 다시 찍거나, 보호자에게\n도움을 요청해보세요"
-            : "조금 더 밝은 곳에서 다시 한 번\n찍어볼까요?"}
+          {errorMessage
+            ? errorMessage
+            : showFamilyHelp
+              ? "사진을 다시 찍거나, 보호자에게\n도움을 요청해보세요"
+              : "조금 더 밝은 곳에서 다시 한 번\n찍어볼까요?"}
         </AppText>
 
         {uri && (

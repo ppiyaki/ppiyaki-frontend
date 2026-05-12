@@ -85,8 +85,29 @@ export default function MedicationsScreen() {
         listResp.responses.map(async (medicine) => {
           try {
             const s = await listSchedules(medicine.id);
+            if (__DEV__) {
+              console.log(
+                "[medications] schedules for medicineId=",
+                medicine.id,
+                "name=",
+                medicine.name,
+                "→ count:",
+                s.responses.length,
+                s.responses.map((x) => ({
+                  id: x.id,
+                  slot: x.mealSlot,
+                  dosage: x.dosage,
+                  daysOfWeek: x.daysOfWeek,
+                })),
+              );
+            }
             return { medicine, schedules: s.responses };
-          } catch {
+          } catch (err) {
+            console.log(
+              "[medications] listSchedules failed for medicineId=",
+              medicine.id,
+              err,
+            );
             return { medicine, schedules: [] };
           }
         }),

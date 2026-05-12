@@ -24,7 +24,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 type IoniconName = ComponentProps<typeof Ionicons>["name"];
 type IconSpec =
   | { family: "ionicons"; name: IoniconName }
-  | { family: "material"; name: ComponentProps<typeof MaterialCommunityIcons>["name"] };
+  | {
+      family: "material";
+      name: ComponentProps<typeof MaterialCommunityIcons>["name"];
+    };
 
 interface DateGroup {
   date: string;
@@ -80,9 +83,7 @@ export default function NotificationsScreen() {
       setHasNext(res.hasNext);
     } catch (e) {
       setError(
-        e instanceof ApiError
-          ? e.toUserMessage()
-          : "알림을 불러오지 못했어요",
+        e instanceof ApiError ? e.toUserMessage() : "알림을 불러오지 못했어요",
       );
     } finally {
       setLoading(false);
@@ -113,7 +114,9 @@ export default function NotificationsScreen() {
   const markRead = async (id: number) => {
     setItems((prev) =>
       prev.map((it) =>
-        it.id === id ? { ...it, isRead: true, readAt: new Date().toISOString() } : it,
+        it.id === id
+          ? { ...it, isRead: true, readAt: new Date().toISOString() }
+          : it,
       ),
     );
     try {
@@ -125,7 +128,9 @@ export default function NotificationsScreen() {
 
   const markAllRead = async () => {
     const now = new Date().toISOString();
-    setItems((prev) => prev.map((it) => ({ ...it, isRead: true, readAt: now })));
+    setItems((prev) =>
+      prev.map((it) => ({ ...it, isRead: true, readAt: now })),
+    );
     try {
       await markAllNotificationsRead();
     } catch (e) {
@@ -136,7 +141,10 @@ export default function NotificationsScreen() {
   const groups = groupByDate(items);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={["top", "left", "right", "bottom"]}
+    >
       <PageHeader
         title="알림"
         rightSlot={
@@ -230,13 +238,16 @@ function NotifCard({
 }) {
   const router = useRouter();
   const meta = CATEGORY_META[item.category];
-  const showConfirm =
-    item.category === "MEDICATION_REMINDER" && !item.isRead;
+  const showConfirm = item.category === "MEDICATION_REMINDER" && !item.isRead;
 
   return (
     <Pressable
       onPress={() => {
-        if (!item.isRead) onMarkRead();
+        // 복약 인증 대기 카드는 카드 탭으로 읽음 처리하지 않음.
+        // 카드를 가볍게 만진 것만으로 인증이 사라지면 사용자가 재시도 불가.
+        if (!item.isRead && item.category !== "MEDICATION_REMINDER") {
+          onMarkRead();
+        }
       }}
       style={({ pressed }) => [
         styles.card,
@@ -268,7 +279,10 @@ function NotifCard({
               color={meta.color}
             />
           )}
-          <AppText type="pretendard-b" style={[styles.timeText, { color: meta.color }]}>
+          <AppText
+            type="pretendard-b"
+            style={[styles.timeText, { color: meta.color }]}
+          >
             {formatTime(item.createdAt)}
           </AppText>
         </View>
@@ -276,8 +290,18 @@ function NotifCard({
       {showConfirm ? (
         <Pressable
           onPress={() => {
-            onMarkRead();
-            router.push("/dose-confirm/intro" as any);
+            // 인증 완료는 백엔드가 자동 처리 (인증 사진 등록 시 알림 read 전이).
+            // 도중 이탈 시 재시도 가능하도록 여기서는 read 처리 안 함.
+            const { scheduleId, targetDate } = parseReminderPayload(
+              item.payload,
+            );
+            router.push({
+              pathname: "/dose-confirm/intro" as any,
+              params: {
+                ...(scheduleId ? { scheduleId: String(scheduleId) } : {}),
+                ...(targetDate ? { targetDate } : {}),
+              },
+            });
           }}
           style={({ pressed }) => [
             styles.confirmBtn,
@@ -285,7 +309,7 @@ function NotifCard({
           ]}
         >
           <AppText type="pretendard-b" style={styles.confirmText}>
-            확인
+            인증하기
           </AppText>
         </Pressable>
       ) : item.isRead ? (
@@ -295,6 +319,28 @@ function NotifCard({
       ) : null}
     </Pressable>
   );
+}
+
+/**
+ * MEDICATION_REMINDER 알림의 payload(JSON 문자열)에서 scheduleId / targetDate 추출.
+ * 백엔드 응답에 따라 둘 다 없을 수 있음 — null safe.
+ */
+function parseReminderPayload(payload: string | null): {
+  scheduleId?: number;
+  targetDate?: string;
+} {
+  if (!payload) return {};
+  try {
+    const obj = JSON.parse(payload) as Record<string, unknown>;
+    const sid = obj.scheduleId;
+    const td = obj.targetDate;
+    return {
+      scheduleId: typeof sid === "number" ? sid : undefined,
+      targetDate: typeof td === "string" ? td : undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 function groupByDate(items: NotificationItem[]): DateGroup[] {

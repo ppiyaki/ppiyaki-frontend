@@ -1,6 +1,10 @@
 import AppText from "@/components/app-text";
+import { PET_STAGES, stageIndex } from "@/data/pet-stages";
+import { ApiError } from "@/services/api";
+import { PetMe, getMyPet } from "@/services/pets";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeInDown, ZoomIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -9,6 +13,29 @@ const REWARD_POINTS = 10;
 
 export default function DoseConfirmSuccessScreen() {
   const router = useRouter();
+  const [pet, setPet] = useState<PetMe | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const p = await getMyPet();
+        if (!cancelled) setPet(p);
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 404)) {
+          console.log("[dose-confirm/success] pet fetch failed:", e);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const currentStage = pet
+    ? PET_STAGES[stageIndex(pet.stage)]
+    : PET_STAGES[0];
+  const streak = pet?.streak ?? 0;
 
   return (
     <SafeAreaView
@@ -21,7 +48,7 @@ export default function DoseConfirmSuccessScreen() {
           style={styles.charWrap}
         >
           <Image
-            source={require("../../assets/images/character/Senior5.png")}
+            source={currentStage.image}
             style={styles.char}
             resizeMode="contain"
           />
@@ -66,7 +93,7 @@ export default function DoseConfirmSuccessScreen() {
         >
           <Ionicons name="flame" size={16} color="#5BC4AE" />
           <AppText type="pretendard-b" style={styles.streakText}>
-            91일 연속 복약 도전 중!
+            {streak}일 연속 복약 도전 중!
           </AppText>
         </Animated.View>
       </View>

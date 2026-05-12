@@ -1,8 +1,22 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import { listMedicines } from "@/services/medicines";
+import { listSchedules } from "@/services/schedules";
+import {
+  getMealTimes,
+  MealSlot,
+  ServerMealSlot,
+} from "@/services/user-settings";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 interface Tip {
@@ -37,12 +51,112 @@ const TIPS: Tip[] = [
   },
 ];
 
+/** "HH:mm:ss" → 분(minutes) */
+function toMinutes(hms: string): number {
+  const [h, m] = hms.split(":").map((x) => parseInt(x, 10));
+  return (h || 0) * 60 + (m || 0);
+}
+
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** 현재 시각에 가장 가까운 (지났거나 1시간 이내) 슬롯 결정 */
+function pickActiveSlot(
+  mealMinutes: Record<MealSlot, number>,
+  nowMin: number,
+): MealSlot {
+  const order: MealSlot[] = ["morning", "noon", "night"];
+  // 1순위: 슬롯시각 ± 90분 윈도우 (가장 가까운 것)
+  let best: { slot: MealSlot; diff: number } | null = null;
+  for (const s of order) {
+    const diff = Math.abs(nowMin - mealMinutes[s]);
+    if (diff <= 90 && (!best || diff < best.diff)) {
+      best = { slot: s, diff };
+    }
+  }
+  if (best) return best.slot;
+  // 2순위: 시각순 — 다음 예정 슬롯
+  for (const s of order) {
+    if (nowMin <= mealMinutes[s]) return s;
+  }
+  // 3순위: 가장 늦은 슬롯 (자정 직전 등)
+  return "night";
+}
+
 export default function DoseConfirmIntroScreen() {
   const router = useRouter();
-  const { scheduleId, targetDate } = useLocalSearchParams<{
-    scheduleId?: string;
-    targetDate?: string;
-  }>();
+  const { scheduleId: paramScheduleId, targetDate: paramTargetDate } =
+    useLocalSearchParams<{
+      scheduleId?: string;
+      targetDate?: string;
+    }>();
+  const [resolvedScheduleId, setResolvedScheduleId] = useState<string | null>(
+    paramScheduleId ?? null,
+  );
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(!paramScheduleId);
+
+  // scheduleId 가 안 넘어왔으면 현재 시각 기준으로 추론
+  useEffect(() => {
+    if (paramScheduleId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [meds, meals] = await Promise.all([
+          listMedicines(),
+          getMealTimes(),
+        ]);
+        const mealMinutes: Record<MealSlot, number> = {
+          morning: toMinutes(meals.morning),
+          noon: toMinutes(meals.noon),
+          night: toMinutes(meals.night),
+        };
+        const now = new Date();
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        const targetSlot: MealSlot = pickActiveSlot(mealMinutes, nowMin);
+        const serverSlot: ServerMealSlot =
+          targetSlot === "morning"
+            ? "BREAKFAST"
+            : targetSlot === "noon"
+              ? "LUNCH"
+              : "DINNER";
+
+        // 약별 schedule 조회 → 현재 슬롯에 해당하는 첫 schedule 사용
+        for (const m of meds.responses) {
+          const s = await listSchedules(m.id);
+          const match = s.responses.find((x) => x.mealSlot === serverSlot);
+          if (match) {
+            if (!cancelled) setResolvedScheduleId(String(match.id));
+            return;
+          }
+        }
+        if (!cancelled) {
+          // 매칭 안 됨 — 임시로 첫 schedule이라도 사용 (fallback)
+          for (const m of meds.responses) {
+            const s = await listSchedules(m.id);
+            if (s.responses[0]) {
+              setResolvedScheduleId(String(s.responses[0].id));
+              return;
+            }
+          }
+          setResolveError("등록된 복약 일정이 없어요");
+        }
+      } catch (e) {
+        console.log("[dose-confirm/intro] resolve schedule failed:", e);
+        if (!cancelled) setResolveError("복약 일정 정보를 불러오지 못했어요");
+      } finally {
+        if (!cancelled) setResolving(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [paramScheduleId]);
+
+  const scheduleId = resolvedScheduleId;
+  const targetDate = paramTargetDate ?? todayIso();
 
   return (
     <SafeAreaView
@@ -89,22 +203,36 @@ export default function DoseConfirmIntroScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
+        {resolveError && (
+          <AppText type="pretendard-m" style={styles.resolveError}>
+            {resolveError}
+          </AppText>
+        )}
         <Pressable
-          onPress={() =>
+          onPress={() => {
+            if (!scheduleId) return;
             router.push({
               pathname: "/dose-confirm/camera" as any,
               params: { scheduleId, targetDate },
-            })
-          }
+            });
+          }}
+          disabled={resolving || !scheduleId}
           style={({ pressed }) => [
             styles.btn,
-            pressed && { opacity: 0.85 },
+            (resolving || !scheduleId) && styles.btnDisabled,
+            pressed && scheduleId && { opacity: 0.85 },
           ]}
         >
-          <Ionicons name="camera" size={22} color="#222" />
-          <AppText type="pretendard-b" style={styles.btnText}>
-            사진 찍으러 가기
-          </AppText>
+          {resolving ? (
+            <ActivityIndicator color="#222" />
+          ) : (
+            <>
+              <Ionicons name="camera" size={22} color="#222" />
+              <AppText type="pretendard-b" style={styles.btnText}>
+                사진 찍으러 가기
+              </AppText>
+            </>
+          )}
         </Pressable>
       </View>
     </SafeAreaView>
@@ -195,8 +323,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "#FFD24D",
   },
+  btnDisabled: {
+    backgroundColor: "#F0EDE0",
+  },
   btnText: {
     fontSize: 18,
     color: "#222",
+  },
+  resolveError: {
+    color: "#E14B4B",
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: 8,
   },
 });

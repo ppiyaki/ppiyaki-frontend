@@ -197,7 +197,6 @@ export default function FamilyHomeScreen() {
     medicines.length > 0
       ? Math.min(...medicines.map((m) => m.remainingAmount))
       : 0;
-  const firstMedicine = medicines[0] ?? null;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -333,14 +332,15 @@ export default function FamilyHomeScreen() {
             </AppText>
           </View>
 
-          {firstMedicine ? (
+          {medicines.length === 0 ? (
+            <View style={styles.medEmpty}>
+              <AppText type="pretendard-m" style={styles.medEmptyText}>
+                등록된 약이 없어요
+              </AppText>
+            </View>
+          ) : (
             <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: "/medication-detail" as any,
-                  params: { id: String(firstMedicine.id) },
-                })
-              }
+              onPress={() => router.push("/family/medications" as any)}
               style={({ pressed }) => [
                 styles.medCard,
                 pressed && { backgroundColor: "#FBF7EC" },
@@ -355,10 +355,10 @@ export default function FamilyHomeScreen() {
                   style={styles.medName}
                   numberOfLines={1}
                 >
-                  {firstMedicine.name}
+                  {medicines[0].name}
                 </AppText>
                 <AppText type="pretendard-m" style={styles.medRemaining}>
-                  잔여 {firstMedicine.remainingAmount}일분
+                  잔여 {medicines[0].remainingAmount}일분
                   {medicines.length > 1
                     ? ` · 외 ${medicines.length - 1}종`
                     : ""}
@@ -366,12 +366,6 @@ export default function FamilyHomeScreen() {
               </View>
               <Ionicons name="chevron-forward" size={20} color="#BBB" />
             </Pressable>
-          ) : (
-            <View style={styles.medEmpty}>
-              <AppText type="pretendard-m" style={styles.medEmptyText}>
-                등록된 약이 없어요
-              </AppText>
-            </View>
           )}
         </View>
       </ScrollView>

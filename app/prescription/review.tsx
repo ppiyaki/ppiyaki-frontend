@@ -77,6 +77,8 @@ export default function PrescriptionReviewScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [slotMap, setSlotMap] = useState<SlotMap>({});
   const [amountMap, setAmountMap] = useState<AmountMap>({});
+  /** candidate별 dosage 입력값 (OCR 누락분 보강용) */
+  const [dosageMap, setDosageMap] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     if (!prescriptionId) return;
@@ -126,7 +128,20 @@ export default function PrescriptionReviewScreen() {
       }
       return next;
     });
+    // v0.9.12: candidate별 초기 dosage = OCR 추출값 (없으면 빈 문자열)
+    setDosageMap((prev) => {
+      const next: Record<number, string> = { ...prev };
+      for (const c of detail.candidates) {
+        if (next[c.id] !== undefined) continue;
+        next[c.id] = c.extractedDosage ?? "";
+      }
+      return next;
+    });
   }, [detail]);
+
+  const updateDosage = (candidateId: number, value: string) => {
+    setDosageMap((prev) => ({ ...prev, [candidateId]: value }));
+  };
 
   const toggleSlot = (candidateId: number, slot: MealSlot) => {
     setSlotMap((prev) => {
@@ -203,14 +218,27 @@ export default function PrescriptionReviewScreen() {
     if (!prescriptionId) return;
     setBusyCandidateId(candidateId);
     try {
-      // ACCEPTED/MANUALLY_CORRECTED일 때만 confirmedMealSlots 함께 전송
+      // ACCEPTED/MANUALLY_CORRECTED일 때만 confirmedMealSlots / dosage 함께 전송
       const confirmedMealSlots =
         decision === "REJECTED"
           ? undefined
           : Array.from(slotMap[candidateId] ?? []).map(toServerSlot);
+      const dosageInput = dosageMap[candidateId]?.trim();
+      const dosage =
+        decision === "REJECTED" || !dosageInput ? undefined : dosageInput;
+      if (__DEV__) {
+        console.log("[prescription] decide candidate:", {
+          candidateId,
+          decision,
+          slotMapRaw: Array.from(slotMap[candidateId] ?? []),
+          confirmedMealSlots,
+          dosage,
+        });
+      }
       await decideCandidate(prescriptionId, candidateId, decision, {
         chosenItemSeq,
         confirmedMealSlots,
+        dosage,
       });
       await load();
     } catch (e) {
@@ -283,6 +311,17 @@ export default function PrescriptionReviewScreen() {
           };
         });
       const result = await confirmPrescription(prescriptionId, medicineAmounts);
+      if (__DEV__) {
+        console.log(
+          "[prescription] confirm result candidates:",
+          result.candidates.map((c) => ({
+            id: c.id,
+            decision: c.caregiverDecision,
+            createdMedicineId: c.createdMedicineId,
+            confirmedMealSlots: c.confirmedMealSlots,
+          })),
+        );
+      }
       const accepted = result.candidates.filter(
         (c) =>
           c.caregiverDecision !== "REJECTED" && c.createdMedicineId !== null,
@@ -411,8 +450,10 @@ export default function PrescriptionReviewScreen() {
                 remaining: DEFAULT_AMOUNT,
               }
             }
+            dosage={dosageMap[c.id] ?? c.extractedDosage ?? ""}
             onToggleSlot={(slot) => toggleSlot(c.id, slot)}
             onChangeAmount={(field, value) => updateAmount(c.id, field, value)}
+            onChangeDosage={(value) => updateDosage(c.id, value)}
             onAccept={() => handleDecide(c.id, "ACCEPTED")}
             onReject={() => handleDecide(c.id, "REJECTED")}
             onCorrect={() => handleManualCorrect(c.id)}
@@ -454,8 +495,10 @@ function CandidateCard({
   busy,
   selectedSlots,
   amount,
+  dosage,
   onToggleSlot,
   onChangeAmount,
+  onChangeDosage,
   onAccept,
   onReject,
   onCorrect,
@@ -464,8 +507,10 @@ function CandidateCard({
   busy: boolean;
   selectedSlots: Set<MealSlot>;
   amount: AmountState;
+  dosage: string;
   onToggleSlot: (slot: MealSlot) => void;
   onChangeAmount: (field: keyof AmountState, value: string) => void;
+  onChangeDosage: (value: string) => void;
   onAccept: () => void;
   onReject: () => void;
   onCorrect: () => void;
@@ -511,6 +556,36 @@ function CandidateCard({
           )}
         </View>
       </View>
+
+      {notRejected && (
+        <View style={styles.amountBox}>
+          <AppText type="pretendard-b" style={styles.amountTitle}>
+            1회 복용량
+            {!candidate.extractedDosage && (
+              <AppText type="pretendard-r" style={styles.dosageHint}>
+                {"  "}OCR 미인식 — 직접 입력해주세요
+              </AppText>
+            )}
+          </AppText>
+          <View style={styles.dosageRow}>
+            <TextInput
+              value={dosage}
+              onChangeText={onChangeDosage}
+              editable={decided === "PENDING"}
+              placeholder="예: 1정, 1캡슐, 10ml"
+              placeholderTextColor="#BBB"
+              maxLength={20}
+              allowFontScaling={false}
+              style={[
+                styles.dosageInput,
+                decided !== "PENDING" && { backgroundColor: "#F4F2EA", color: "#888" },
+                !candidate.extractedDosage &&
+                  !dosage.trim() && { borderColor: "#E14B4B" },
+              ]}
+            />
+          </View>
+        </View>
+      )}
 
       {notRejected && (
         <View style={styles.amountBox}>
@@ -846,6 +921,29 @@ const styles = StyleSheet.create({
   amountFieldLabel: {
     fontSize: 12,
     color: "#666",
+  },
+  dosageHint: {
+    fontSize: 11,
+    color: "#E14B4B",
+  },
+  dosageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  dosageInput: {
+    flex: 1,
+    height: 44,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: "Pretendard-Medium",
+    color: "#222",
+    backgroundColor: "#FAFAF6",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+    borderRadius: 8,
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
   amountInput: {
     flex: 1,

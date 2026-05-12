@@ -88,6 +88,7 @@ export async function getPrescription(
 /**
  * 처방전 후보 결정 (ACCEPTED / REJECTED / MANUALLY_CORRECTED).
  * v0.9.3: confirmedMealSlots 추가 — confirm 시 슬롯별 schedule 자동 생성.
+ * v0.9.12(#317): dosage 추가 — OCR 누락 dosage 보호자가 직접 보강.
  */
 export async function decideCandidate(
   prescriptionId: number,
@@ -96,6 +97,7 @@ export async function decideCandidate(
   options?: {
     chosenItemSeq?: string;
     confirmedMealSlots?: ServerMealSlot[];
+    dosage?: string;
   },
 ): Promise<void> {
   await apiFetch<void>(
@@ -109,6 +111,7 @@ export async function decideCandidate(
             ? options?.chosenItemSeq
             : undefined,
         confirmedMealSlots: options?.confirmedMealSlots,
+        dosage: options?.dosage,
       },
     },
   );

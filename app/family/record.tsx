@@ -14,7 +14,12 @@ import {
   WeeklyDashboard,
   WeeklyDay,
 } from "@/services/dashboard";
-import { fromServerSlot, MealSlot } from "@/services/user-settings";
+import {
+  fromServerSlot,
+  getMealTimes,
+  MealSlot,
+  MealTimes,
+} from "@/services/user-settings";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { ComponentProps, useCallback, useEffect, useState } from "react";
@@ -72,18 +77,38 @@ interface Palette {
   bg: string;
 }
 
+/**
+ * 백엔드가 시간 지난 PENDING 을 MISSED 로 전이 안 시키는 케이스 보정.
+ * mealTime + GRACE_MIN 이 현재보다 과거면 시각적으로 MISSED 취급.
+ * 백엔드가 수정되면 이 함수 제거하면 됨.
+ */
+const MISSED_GRACE_MIN = 60;
+function effectiveSlotStatus(
+  status: SlotStatus,
+  mealTimeHms: string,
+  dateIso: string,
+): SlotStatus {
+  if (status !== "PENDING") return status;
+  const [h, m] = mealTimeHms.split(":").map((x) => parseInt(x, 10) || 0);
+  const slotDate = new Date(dateIso);
+  slotDate.setHours(h, m + MISSED_GRACE_MIN, 0, 0);
+  return slotDate < new Date() ? "MISSED" : "PENDING";
+}
+
 function paletteForStatus(s: DayStatus | SlotStatus): Palette {
   switch (s) {
     case "PERFECT":
       return { color: "#5BC4AE", bg: "#E8F7F2" };
     case "DELAYED":
-    case "PENDING":
+      // 지연되었지만 인증 완료 — 노랑
       return { color: "#F8B835", bg: "#FFF4C7" };
     case "MISSED":
       return { color: "#E14B4B", bg: "#FCEBEB" };
+    case "PENDING":
     case "FUTURE":
     case "NOT_SCHEDULED":
     default:
+      // 예정/미래/일정없음 — 회색
       return { color: "#CFCFCF", bg: "#F4F2EA" };
   }
 }
@@ -106,6 +131,8 @@ export default function FamilyRecordScreen() {
   const [period, setPeriod] = useState<Period>("day");
   const [seniorId, setSeniorId] = useState<number | null>(null);
   const [seniorName, setSeniorName] = useState<string>("어르신");
+  const [caregiverName, setCaregiverName] = useState<string>("");
+  const [daysLeft, setDaysLeft] = useState<number>(0);
 
   // 시니어 ID 부트스트랩
   useEffect(() => {
@@ -118,13 +145,33 @@ export default function FamilyRecordScreen() {
     })();
   }, []);
 
+  // 헤더용 추가 정보 (caregiverName, remainingDays) — 일간 대시보드 응답 활용
+  useEffect(() => {
+    if (seniorId === null) return;
+    let cancelled = false;
+    const today = toIsoDate(new Date());
+    void (async () => {
+      try {
+        const res = await getDashboardDaily(seniorId, today);
+        if (cancelled) return;
+        setCaregiverName(res.header.caregiverName ?? "");
+        setDaysLeft(res.header.remainingDays ?? 0);
+      } catch (e) {
+        console.log("[record] header fetch failed:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [seniorId]);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.fixedTop}>
         <SeniorSummaryHeader
           name={seniorName}
-          caregiver=""
-          daysLeft={0}
+          caregiver={caregiverName}
+          daysLeft={daysLeft}
           image={DEFAULT_SENIOR_IMAGE}
         />
         <PeriodToggle value={period} onChange={setPeriod} />
@@ -205,6 +252,20 @@ function DailyView({ seniorId }: { seniorId: number }) {
       void (async () => {
         try {
           const res = await getDashboardDaily(seniorId, today);
+          if (__DEV__) {
+            console.log("[record/daily] response:", {
+              seniorId,
+              today,
+              dayStatus: res.dayStatus,
+              slots: res.slots.map((sl) => ({
+                slot: sl.slot,
+                status: sl.status,
+                mealTime: sl.mealTime,
+                takenAt: sl.takenAt,
+                medicinesCount: sl.medicines.length,
+              })),
+            });
+          }
           if (!cancelled) setData(res);
         } catch (e) {
           if (!cancelled) {
@@ -265,7 +326,7 @@ function DailyView({ seniorId }: { seniorId: number }) {
 
         <View style={s.photoRow}>
           {data.slots.map((slot) => (
-            <PhotoSlot key={slot.slot} slot={slot} />
+            <PhotoSlot key={slot.slot} slot={slot} dateIso={data.date} />
           ))}
         </View>
       </View>
@@ -298,10 +359,11 @@ function DailyView({ seniorId }: { seniorId: number }) {
   );
 }
 
-function PhotoSlot({ slot }: { slot: DailySlot }) {
-  const palette = paletteForStatus(slot.status);
+function PhotoSlot({ slot, dateIso }: { slot: DailySlot; dateIso: string }) {
+  const effective = effectiveSlotStatus(slot.status, slot.mealTime, dateIso);
+  const palette = paletteForStatus(effective);
   const localSlot = fromServerSlot(slot.slot);
-  const done = slot.status === "PERFECT" || slot.status === "DELAYED";
+  const done = effective === "PERFECT" || effective === "DELAYED";
   return (
     <View style={s.photoSlot}>
       <View
@@ -328,7 +390,7 @@ function PhotoSlot({ slot }: { slot: DailySlot }) {
         <AppText type="pretendard-b" style={s.photoLabel}>
           {SLOT_LABEL[localSlot]}
         </AppText>
-        <StatusDotMini status={slot.status} />
+        <StatusDotMini status={effective} />
       </View>
     </View>
   );
@@ -342,7 +404,7 @@ function StatusDotMini({ status }: { status: SlotStatus }) {
       </View>
     );
   }
-  if (status === "DELAYED" || status === "PENDING") {
+  if (status === "DELAYED") {
     return (
       <View style={[s.photoCheckMini, { backgroundColor: "#F8B835" }]}>
         <Ionicons name="time" size={10} color="#FFF" />
@@ -356,6 +418,7 @@ function StatusDotMini({ status }: { status: SlotStatus }) {
       </View>
     );
   }
+  // PENDING / NOT_SCHEDULED — 빈 dot
   return <View style={s.photoCheckEmpty} />;
 }
 
@@ -402,6 +465,7 @@ function PillRow({
 
 function WeeklyView({ seniorId }: { seniorId: number }) {
   const [data, setData] = useState<WeeklyDashboard | null>(null);
+  const [meals, setMeals] = useState<MealTimes | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -413,8 +477,14 @@ function WeeklyView({ seniorId }: { seniorId: number }) {
       setError(null);
       void (async () => {
         try {
-          const res = await getDashboardWeekly(seniorId, weekStart);
-          if (!cancelled) setData(res);
+          const [res, mt] = await Promise.all([
+            getDashboardWeekly(seniorId, weekStart),
+            getMealTimes(),
+          ]);
+          if (!cancelled) {
+            setData(res);
+            setMeals(mt);
+          }
         } catch (e) {
           if (!cancelled) {
             setError(
@@ -508,6 +578,8 @@ function WeeklyView({ seniorId }: { seniorId: number }) {
             key={row.date}
             row={row}
             isToday={row.date === todayIso}
+            todayIso={todayIso}
+            meals={meals}
           />
         ))}
       </View>
@@ -549,14 +621,10 @@ function StatusDot({ status }: { status: DayStatus }) {
       </View>
     );
   }
-  if (status === "DELAYED" || status === "PENDING") {
+  if (status === "DELAYED") {
     return (
       <View style={[s.statusDot, { backgroundColor: "#F8B835" }]}>
-        <Ionicons
-          name={status === "DELAYED" ? "alert" : "time"}
-          size={14}
-          color="#FFF"
-        />
+        <Ionicons name="alert" size={14} color="#FFF" />
       </View>
     );
   }
@@ -567,17 +635,23 @@ function StatusDot({ status }: { status: DayStatus }) {
       </View>
     );
   }
+  // PENDING / FUTURE — 빈 점선 dot
   return <View style={[s.statusDot, s.statusDotEmpty]} />;
 }
 
 function WeekDetailCard({
   row,
   isToday,
+  todayIso,
+  meals,
 }: {
   row: WeeklyDay;
   isToday: boolean;
+  todayIso: string;
+  meals: MealTimes | null;
 }) {
   const isFuture = row.dayStatus === "FUTURE";
+  const isPast = row.date < todayIso;
   return (
     <View
       style={[
@@ -596,8 +670,24 @@ function WeekDetailCard({
       </View>
       {(["BREAKFAST", "LUNCH", "DINNER"] as const).map((slot) => {
         const marker = row.slots.find((m) => m.slot === slot);
-        const status: SlotStatus = marker?.status ?? "NOT_SCHEDULED";
-        return <DetailIcon key={slot} kind={slot} status={status} />;
+        const raw: SlotStatus = marker?.status ?? "NOT_SCHEDULED";
+        // 과거 날짜 PENDING → MISSED 로 강제
+        // 오늘 PENDING → mealTime + grace 지났는지 체크
+        let effective: SlotStatus = raw;
+        if (raw === "PENDING") {
+          if (isPast) {
+            effective = "MISSED";
+          } else if (isToday && meals) {
+            const mt =
+              slot === "BREAKFAST"
+                ? meals.morning
+                : slot === "LUNCH"
+                  ? meals.noon
+                  : meals.night;
+            effective = effectiveSlotStatus(raw, mt, row.date);
+          }
+        }
+        return <DetailIcon key={slot} kind={slot} status={effective} />;
       })}
     </View>
   );
@@ -797,13 +887,14 @@ function CalendarCell({
   } else if (status === "PERFECT") {
     bg = "#5BC4AE";
     textColor = "#FFF";
-  } else if (status === "DELAYED" || status === "PENDING") {
+  } else if (status === "DELAYED") {
     bg = "#F8B835";
     textColor = "#FFF";
   } else if (status === "MISSED") {
     bg = "#E14B4B";
     textColor = "#FFF";
   }
+  // PENDING / FUTURE / NOT_SCHEDULED — 빈칸 (textColor만)
 
   return (
     <View style={s.calendarCell}>

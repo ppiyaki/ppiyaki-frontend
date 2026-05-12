@@ -1,9 +1,35 @@
+import { listNotifications } from "@/services/notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { useEffect, useState } from "react";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const POLL_INTERVAL_MS = 30_000;
 
 export default function FamilyTabLayout() {
   const insets = useSafeAreaInsets();
+  const [hasUnread, setHasUnread] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await listNotifications({ size: 20 });
+        if (!cancelled) {
+          setHasUnread(res.responses.some((n) => !n.isRead));
+        }
+      } catch {
+        // 무시 — 일시 실패는 표시 안 함
+      }
+    };
+    void check();
+    const timer = setInterval(check, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   return (
     <Tabs
@@ -48,7 +74,24 @@ export default function FamilyTabLayout() {
         options={{
           title: "알림",
           tabBarIcon: ({ color }) => (
-            <Ionicons name="notifications-outline" size={24} color={color} />
+            <View>
+              <Ionicons name="notifications-outline" size={24} color={color} />
+              {hasUnread && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: -2,
+                    right: -4,
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: "#E14B4B",
+                    borderWidth: 1.5,
+                    borderColor: "#FFF",
+                  }}
+                />
+              )}
+            </View>
           ),
         }}
       />
@@ -63,6 +106,10 @@ export default function FamilyTabLayout() {
       />
       <Tabs.Screen
         name="prescriptions"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="medications"
         options={{ href: null }}
       />
     </Tabs>

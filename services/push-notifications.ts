@@ -10,6 +10,19 @@ import { getAccessToken } from "./token-storage";
 
 const TOKEN_ID_KEY = "fcmTokenId";
 
+/**
+ * 포그라운드 푸시 도착 시 시스템 배너 + 사운드 + 뱃지 표시.
+ * 모듈 로드 시 1회 설정 (앱 부팅 시 root layout 가 이 모듈 import 함).
+ */
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
 function detectPlatform(): DevicePlatform {
   if (Platform.OS === "ios") return "IOS";
   if (Platform.OS === "android") return "ANDROID";

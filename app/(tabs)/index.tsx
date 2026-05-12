@@ -2,6 +2,7 @@ import AppText from "@/components/app-text";
 import { PET_STAGES, stageIndex } from "@/data/pet-stages";
 import { ApiError } from "@/services/api";
 import { getMe } from "@/services/auth";
+import { listNotifications } from "@/services/notifications";
 import { PetMe, getMyPet } from "@/services/pets";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -63,22 +64,27 @@ export default function HomeScreen() {
   const router = useRouter();
   const [nickname, setNickname] = useState<string>("");
   const [pet, setPet] = useState<PetMe | null>(null);
+  const [hasUnread, setHasUnread] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       void (async () => {
-        const [me, petRes] = await Promise.all([
+        const [me, petRes, notifRes] = await Promise.all([
           getMe().catch(() => null),
           getMyPet().catch((e) => {
             if (e instanceof ApiError && e.status === 404) return null;
             console.log("[home] pet fetch failed:", e);
             return null;
           }),
+          listNotifications({ size: 20 }).catch(() => null),
         ]);
         if (cancelled) return;
         if (me) setNickname(me.nickname);
         if (petRes) setPet(petRes);
+        setHasUnread(
+          notifRes ? notifRes.responses.some((n) => !n.isRead) : false,
+        );
       })();
       return () => {
         cancelled = true;
@@ -119,7 +125,7 @@ export default function HomeScreen() {
           style={styles.notifBtn}
         >
           <Ionicons name="notifications-outline" size={32} color="#555" />
-          <View style={styles.notifDot} />
+          {hasUnread && <View style={styles.notifDot} />}
         </Pressable>
       </View>
 
