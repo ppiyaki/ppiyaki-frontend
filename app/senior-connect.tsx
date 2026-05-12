@@ -89,7 +89,7 @@ export default function SeniorConnectScreen() {
               </AppText>
               <AppText type="pretendard-m" style={styles.infoText}>
                 보호자가 삐약이 앱에서 발급한 6자리 코드를 입력해주세요.{"\n"}
-                코드는 발급 후 10분간 유효해요.
+                코드는 발급 후 5분간 유효해요.
               </AppText>
             </View>
           </View>

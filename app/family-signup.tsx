@@ -45,7 +45,11 @@ export default function FamilySignupScreen() {
     try {
       await signupLocal(trimmedId, password, trimmedNick);
       // 카카오/로컬 모두 4단계 온보딩으로 이동
-      router.replace(ROUTE_PATHS.onboarding as any);
+      // 로컬 가입 시 입력한 닉네임을 4단계 1번 화면에 prefill
+      router.replace({
+        pathname: ROUTE_PATHS.onboarding as any,
+        params: { prefillNickname: trimmedNick },
+      });
     } catch (e) {
       const msg =
         e instanceof ApiError && e.status === 409

@@ -1,8 +1,8 @@
 import AppText from "@/components/app-text";
 import SignupProgress from "@/components/signup-progress";
 import { useSignup } from "@/contexts/signup-context";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,8 +15,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function NicknameScreen() {
   const router = useRouter();
+  const { prefillNickname } = useLocalSearchParams<{
+    prefillNickname?: string;
+  }>();
   const { nickname: ctxNickname, setNickname: setCtxNickname } = useSignup();
-  const [nickname, setNickname] = useState(ctxNickname);
+  const [nickname, setNickname] = useState(
+    ctxNickname || prefillNickname || "",
+  );
+  // 라우터 param prefill 도 context 에 반영 (다음 단계 진행 시 일관성)
+  useEffect(() => {
+    if (!ctxNickname && prefillNickname) {
+      setCtxNickname(prefillNickname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const trimmed = nickname.trim();
   const canProceed = trimmed.length > 0;
 

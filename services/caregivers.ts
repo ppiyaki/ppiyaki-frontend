@@ -50,9 +50,14 @@ export async function resolveSeniorId(): Promise<number | undefined> {
   return s?.id;
 }
 
-/** 시니어 연동 해제 */
+/**
+ * 보호자 ↔ 시니어 연동 해제.
+ *  - 204 No Content 성공
+ *  - 403 CAREGIVER 권한 없음
+ *  - 404 활성 CareRelation 없음
+ */
 export async function unlinkSenior(seniorId: number): Promise<void> {
-  await apiFetch<void>(`/api/v1/caregivers/me/seniors/${seniorId}`, {
+  await apiFetch<void>(`/api/v1/care-relations/seniors/${seniorId}`, {
     method: "DELETE",
   });
 }

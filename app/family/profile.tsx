@@ -2,12 +2,12 @@ import AppText from "@/components/app-text";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
 import { getMe, logoutKakao } from "@/services/auth";
+import { InviteCodeResponse, issueInviteCode } from "@/services/care-relations";
 import {
   LinkedSenior,
   listLinkedSeniors,
   unlinkSenior,
 } from "@/services/caregivers";
-import { InviteCodeResponse, issueInviteCode } from "@/services/care-relations";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -96,9 +96,7 @@ export default function FamilyProfileScreen() {
       await load();
     } catch (e) {
       const msg =
-        e instanceof ApiError
-          ? e.toUserMessage()
-          : "연동 해제에 실패했어요";
+        e instanceof ApiError ? e.toUserMessage() : "연동 해제에 실패했어요";
       await confirm({
         title: "해제 실패",
         message: msg,
@@ -301,7 +299,7 @@ function InviteCodeModal({
 
           <AppText type="pretendard-m" style={styles.modalDesc}>
             아래 코드를 시니어에게 알려드리세요.{"\n"}
-            발급 후 10분간 유효해요.
+            발급 후 5분간 유효해요.
           </AppText>
 
           {loading && (

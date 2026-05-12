@@ -463,7 +463,8 @@ function PresetCard({
           borderWidth: 2,
           backgroundColor: selectedBgColor,
         },
-        disabled && { opacity: 0.6 },
+        // disabled 시 opacity 변화는 없앰 — 임계값 조정 중 깜빡임 방지.
+        // 탭은 disabled prop 으로 막혀있음.
         pressed && !disabled && { opacity: 0.85 },
       ]}
     >

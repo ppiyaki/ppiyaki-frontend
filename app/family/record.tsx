@@ -482,6 +482,22 @@ function WeeklyView({ seniorId }: { seniorId: number }) {
             getDashboardWeekly(seniorId, weekStart),
             getMealTimes(),
           ]);
+          if (__DEV__) {
+            console.log(
+              "[record/weekly] response:",
+              JSON.stringify(
+                {
+                  seniorId,
+                  weekStart: res.weekStart,
+                  weekEnd: res.weekEnd,
+                  adherenceRate: res.adherenceRate,
+                  days: res.days,
+                },
+                null,
+                2,
+              ),
+            );
+          }
           if (!cancelled) {
             setData(res);
             setMeals(mt);
