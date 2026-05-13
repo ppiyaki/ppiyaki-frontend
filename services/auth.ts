@@ -1,7 +1,7 @@
 import * as KakaoLogin from "@react-native-seoul/kakao-login";
 import { apiFetch } from "./api";
 import { clearChatCache } from "./chat";
-import { tearDownPush } from "./push-notifications";
+import { setupPushAndRegister, tearDownPush } from "./push-notifications";
 import {
   clearTokens,
   getRefreshToken,
@@ -60,6 +60,8 @@ export async function loginWithKakao(): Promise<AuthResponse> {
 
   await saveTokens(data.accessToken, data.refreshToken);
   clearMeCache();
+  // 로그인 직후 FCM 토큰 재등록 (현재 user_id 로 device row 생성)
+  void setupPushAndRegister();
   return data;
 }
 
@@ -79,6 +81,8 @@ export async function loginWithInviteCode(
   });
   await saveTokens(data.accessToken, data.refreshToken);
   clearMeCache();
+  // 로그인 직후 FCM 토큰 재등록 (현재 user_id 로 device row 생성)
+  void setupPushAndRegister();
   return data;
 }
 
@@ -99,6 +103,8 @@ export async function loginLocal(
   });
   await saveTokens(data.accessToken, data.refreshToken);
   clearMeCache();
+  // 로그인 직후 FCM 토큰 재등록 (현재 user_id 로 device row 생성)
+  void setupPushAndRegister();
   return data;
 }
 
@@ -119,6 +125,8 @@ export async function signupLocal(
   });
   await saveTokens(data.accessToken, data.refreshToken);
   clearMeCache();
+  // 로그인 직후 FCM 토큰 재등록 (현재 user_id 로 device row 생성)
+  void setupPushAndRegister();
   return data;
 }
 
