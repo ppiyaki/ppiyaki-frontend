@@ -14,8 +14,15 @@ export interface NotificationItem {
   title: string;
   body: string;
   payload: string | null;
+  /** 알림함에서 봤는지 여부 (readAt 기반 derived). 백엔드는 readAt 만 보냄. */
   isRead: boolean;
   readAt: string | null;
+  /**
+   * 복약 인증 완료 시점. MEDICATION_REMINDER 한정으로 의미 있음 —
+   * 해당 시니어의 같은 날짜/슬롯 복약 인증 (POST /medication-logs status=TAKEN) 시 백엔드가 채움.
+   * 다른 카테고리는 항상 null.
+   */
+  takenAt: string | null;
   createdAt: string;
 }
 

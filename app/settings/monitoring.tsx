@@ -286,7 +286,7 @@ export default function MonitoringSettingsScreen() {
                   iconColor="#5BC4AE"
                   selectedBorderColor="#5BC4AE"
                   selectedBgColor="#E8F7F2"
-                  title="기본 건강 알림"
+                  title="기본 관리 모드"
                   desc="지연 60분 / 미접속 48시간"
                 />
                 <PresetCard
@@ -297,19 +297,18 @@ export default function MonitoringSettingsScreen() {
                   iconColor="#F8B835"
                   selectedBorderColor="#F8B835"
                   selectedBgColor="#FFF4C7"
-                  title="집중 안심 모드"
+                  title="집중 관리 모드"
                   desc="지연 30분 / 미접속 12시간"
                 />
               </View>
               {inferredPreset === null && (
                 <View style={styles.customBadge}>
-                  <Ionicons
-                    name="options"
-                    size={16}
-                    color="#4799E0"
-                  />
+                  <Ionicons name="options" size={16} color="#4799E0" />
                   <View style={{ flex: 1 }}>
-                    <AppText type="pretendard-b" style={styles.customBadgeTitle}>
+                    <AppText
+                      type="pretendard-b"
+                      style={styles.customBadgeTitle}
+                    >
                       커스텀 알림
                     </AppText>
                     <AppText type="pretendard-r" style={styles.customBadgeDesc}>
@@ -478,7 +477,9 @@ function PresetCard({
         </AppText>
       </View>
       {selected && (
-        <View style={[styles.presetCheck, { backgroundColor: selectedBorderColor }]}>
+        <View
+          style={[styles.presetCheck, { backgroundColor: selectedBorderColor }]}
+        >
           <Ionicons name="checkmark" size={12} color="#FFF" />
         </View>
       )}

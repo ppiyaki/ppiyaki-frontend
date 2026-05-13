@@ -96,6 +96,30 @@ export default function FamilyNotificationsScreen() {
     setError(null);
     try {
       const res = await listNotifications({ size: 50 });
+      if (__DEV__) {
+        console.log(
+          "[family-notif] list response:",
+          JSON.stringify(
+            {
+              count: res.responses.length,
+              nextCursor: res.nextCursor,
+              hasNext: res.hasNext,
+              items: res.responses.map((n) => ({
+                id: n.id,
+                category: n.category,
+                seniorId: n.seniorId,
+                title: n.title,
+                body: n.body,
+                createdAt: n.createdAt,
+                readAt: n.readAt,
+                takenAt: n.takenAt,
+              })),
+            },
+            null,
+            2,
+          ),
+        );
+      }
       setItems(res.responses);
       setCursor(res.nextCursor);
       setHasNext(res.hasNext);

@@ -50,7 +50,7 @@ type ModeDef = {
 const MODES: ModeDef[] = [
   {
     key: "basic",
-    title: "기본 건강 알림 모드",
+    title: "기본 관리 모드",
     subtitle: "꼭 필요한 알림만",
     points: ["경고 없이 복약 확인 알림만 제공", "일간·월간 리포트 알림"],
     recommend: "일상 속 간단한 복약 확인이 필요한 어르신",
@@ -60,7 +60,7 @@ const MODES: ModeDef[] = [
   },
   {
     key: "intensive",
-    title: "집중 안심 모드",
+    title: "집중 관리 모드",
     subtitle: "실시간 확인과 빠른 경고",
     points: [
       "복약 완료 즉시 알림",
@@ -77,13 +77,8 @@ const MODES: ModeDef[] = [
 export default function NotificationsScreen() {
   const router = useRouter();
   const confirm = useConfirm();
-  const {
-    nickname,
-    seniors,
-    careModes,
-    setCareMode,
-    setIssuedCodes,
-  } = useSignup();
+  const { nickname, seniors, careModes, setCareMode, setIssuedCodes } =
+    useSignup();
   const [submitting, setSubmitting] = useState(false);
 
   const allSelected =

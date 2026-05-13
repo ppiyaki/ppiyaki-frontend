@@ -240,7 +240,10 @@ function NotifCard({
 }) {
   const router = useRouter();
   const meta = CATEGORY_META[item.category];
-  const showConfirm = item.category === "MEDICATION_REMINDER" && !item.isRead;
+  // 복약 인증 미완료 (takenAt null) 인 MEDICATION_REMINDER 만 "확인" 버튼 노출.
+  // 인증 완료 시 백엔드가 takenAt 채워주고, 그 시점부터 버튼 사라짐.
+  const showConfirm =
+    item.category === "MEDICATION_REMINDER" && item.takenAt == null;
 
   return (
     <Pressable
@@ -292,8 +295,6 @@ function NotifCard({
       {showConfirm ? (
         <Pressable
           onPress={() => {
-            // 인증 완료는 백엔드가 자동 처리 (인증 사진 등록 시 알림 read 전이).
-            // 도중 이탈 시 재시도 가능하도록 여기서는 read 처리 안 함.
             const { scheduleId, targetDate } = parseReminderPayload(
               item.payload,
             );
@@ -314,6 +315,11 @@ function NotifCard({
             인증하기
           </AppText>
         </Pressable>
+      ) : item.category === "MEDICATION_REMINDER" && item.takenAt != null ? (
+        // 복약 인증 완료 — 초록 체크
+        <View style={styles.takenBadge}>
+          <Ionicons name="checkmark" size={18} color="#FFF" />
+        </View>
       ) : item.isRead ? (
         <View style={styles.doneBadge}>
           <Ionicons name="checkmark" size={18} color="#AAA" />
@@ -428,6 +434,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#E0E0E0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  takenBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#5BC4AE",
     justifyContent: "center",
     alignItems: "center",
   },

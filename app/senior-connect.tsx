@@ -62,6 +62,23 @@ export default function SeniorConnectScreen() {
         style={styles.kav}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        {/* 상단 — 뒤로가기 */}
+        <View style={styles.topBar}>
+          <Pressable
+            onPress={() => router.replace("/select-role" as any)}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.backBtn,
+              pressed && { opacity: 0.6 },
+            ]}
+          >
+            <Ionicons name="chevron-back" size={22} color="#333" />
+            <AppText type="pretendard-m" style={styles.backText}>
+              돌아가기
+            </AppText>
+          </Pressable>
+        </View>
+
         <View style={styles.inner}>
           {/* 상단 아이콘 + 헤드라인 */}
           <View style={styles.headIcon}>
@@ -176,10 +193,26 @@ const styles = StyleSheet.create({
   kav: {
     flex: 1,
   },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  backText: {
+    fontSize: 15,
+    color: "#333",
+  },
   inner: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 32,
+    paddingTop: 16,
     gap: 14,
   },
   headIcon: {

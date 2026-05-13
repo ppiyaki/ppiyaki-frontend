@@ -1,7 +1,7 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PrescriptionIntroScreen() {
@@ -22,14 +22,16 @@ export default function PrescriptionIntroScreen() {
             </AppText>
           </View> */}
           <AppText type="pretendard-m" style={styles.guideText}>
-            레이아웃 사진을 참고하여 처방전을 찍어주세요.
+            사진을 참고하여 전체 처방전 사진을 찍어주세요.
           </AppText>
         </View>
 
         <View style={styles.exampleBox}>
-          <AppText type="pretendard-m" style={styles.exampleText}>
-            (예시 레이아웃 사진)
-          </AppText>
+          <Image
+            source={require("../../assets/images/example.png")}
+            style={styles.exampleImage}
+            resizeMode="contain"
+          />
         </View>
       </View>
 
@@ -86,6 +88,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 20,
+    overflow: "hidden",
+  },
+  exampleImage: {
+    width: "100%",
+    height: "100%",
   },
   exampleText: {
     fontSize: 16,
