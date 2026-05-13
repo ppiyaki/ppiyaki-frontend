@@ -240,7 +240,29 @@ export default function PrescriptionReviewScreen() {
         confirmedMealSlots,
         dosage,
       });
-      await load();
+      // 전체 재조회 대신 해당 candidate 의 decision 만 로컬 패치 — 슬롯/잔여분/dosage 입력 유지
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              candidates: prev.candidates.map((c) =>
+                c.id === candidateId
+                  ? {
+                      ...c,
+                      caregiverDecision: decision,
+                      ...(chosenItemSeq
+                        ? { caregiverChosenItemSeq: chosenItemSeq }
+                        : {}),
+                      ...(confirmedMealSlots
+                        ? { confirmedMealSlots }
+                        : {}),
+                      ...(dosage ? { extractedDosage: dosage } : {}),
+                    }
+                  : c,
+              ),
+            }
+          : prev,
+      );
     } catch (e) {
       await showApiError(e);
     } finally {

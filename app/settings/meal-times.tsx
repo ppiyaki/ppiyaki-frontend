@@ -14,9 +14,11 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -202,6 +204,7 @@ function SlotPicker({
 }) {
   const meta = SLOT_META[slot];
   const scrollRef = useRef<ScrollView>(null);
+  const [editing, setEditing] = useState(false);
 
   // 선택 변경 시 가운데로 자동 스크롤
   useEffect(() => {
@@ -229,6 +232,16 @@ function SlotPicker({
         >
           {value}
         </AppText>
+        <Pressable
+          onPress={() => setEditing(true)}
+          hitSlop={10}
+          style={({ pressed }) => [
+            styles.editBtn,
+            pressed && { opacity: 0.6 },
+          ]}
+        >
+          <Ionicons name="create-outline" size={20} color="#666" />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -261,7 +274,157 @@ function SlotPicker({
           );
         })}
       </ScrollView>
+
+      <TimeEditModal
+        visible={editing}
+        label={meta.label}
+        accentColor={meta.color}
+        accentBg={meta.bg}
+        initial={value}
+        onClose={() => setEditing(false)}
+        onSave={(v) => {
+          onChange(v);
+          setEditing(false);
+        }}
+      />
     </View>
+  );
+}
+
+/** HH:mm 직접 입력 모달 — 시·분 따로 받음. */
+function TimeEditModal({
+  visible,
+  label,
+  accentColor,
+  accentBg,
+  initial,
+  onClose,
+  onSave,
+}: {
+  visible: boolean;
+  label: string;
+  accentColor: string;
+  accentBg: string;
+  initial: string;
+  onClose: () => void;
+  onSave: (v: string) => void;
+}) {
+  const [hour, setHour] = useState("");
+  const [minute, setMinute] = useState("");
+
+  // 모달 열릴 때마다 initial 로 reset
+  useEffect(() => {
+    if (visible) {
+      const [h, m] = initial.split(":");
+      setHour(h ?? "");
+      setMinute(m ?? "");
+    }
+  }, [visible, initial]);
+
+  const hourNum = parseInt(hour, 10);
+  const minuteNum = parseInt(minute, 10);
+  const valid =
+    !isNaN(hourNum) &&
+    hourNum >= 0 &&
+    hourNum <= 23 &&
+    !isNaN(minuteNum) &&
+    minuteNum >= 0 &&
+    minuteNum <= 59;
+
+  const handleSave = () => {
+    if (!valid) return;
+    const hh = String(hourNum).padStart(2, "0");
+    const mm = String(minuteNum).padStart(2, "0");
+    onSave(`${hh}:${mm}`);
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={() => {}}>
+          <AppText type="pretendard-b" style={styles.modalTitle}>
+            {label} 시간 직접 입력
+          </AppText>
+          <AppText type="pretendard-r" style={styles.modalDesc}>
+            시: 0~23, 분: 0~59
+          </AppText>
+
+          <View style={styles.modalInputRow}>
+            <TextInput
+              value={hour}
+              onChangeText={(t) => setHour(t.replace(/[^0-9]/g, "").slice(0, 2))}
+              keyboardType="number-pad"
+              maxLength={2}
+              placeholder="00"
+              placeholderTextColor="#BBB"
+              allowFontScaling={false}
+              style={[styles.modalInput, { borderColor: accentColor }]}
+            />
+            <AppText type="extrabold" style={styles.modalColon}>
+              :
+            </AppText>
+            <TextInput
+              value={minute}
+              onChangeText={(t) =>
+                setMinute(t.replace(/[^0-9]/g, "").slice(0, 2))
+              }
+              keyboardType="number-pad"
+              maxLength={2}
+              placeholder="00"
+              placeholderTextColor="#BBB"
+              allowFontScaling={false}
+              style={[styles.modalInput, { borderColor: accentColor }]}
+            />
+          </View>
+
+          <View style={styles.modalActions}>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.modalBtn,
+                styles.modalBtnSecondary,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <AppText
+                type="pretendard-b"
+                style={styles.modalBtnSecondaryText}
+              >
+                취소
+              </AppText>
+            </Pressable>
+            <Pressable
+              onPress={handleSave}
+              disabled={!valid}
+              style={({ pressed }) => [
+                styles.modalBtn,
+                {
+                  backgroundColor: valid ? accentBg : "#F0EDE0",
+                  borderColor: valid ? accentColor : "transparent",
+                  borderWidth: valid ? 1.5 : 0,
+                },
+                pressed && valid && { opacity: 0.85 },
+              ]}
+            >
+              <AppText
+                type="pretendard-b"
+                style={[
+                  styles.modalBtnPrimaryText,
+                  { color: valid ? accentColor : "#888" },
+                ]}
+              >
+                확인
+              </AppText>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -321,6 +484,90 @@ const styles = StyleSheet.create({
   },
   slotValue: {
     fontSize: 22,
+  },
+  editBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FAFAF6",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  /* 시간 직접 입력 모달 */
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#FFF",
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    color: "#222",
+  },
+  modalDesc: {
+    fontSize: 13,
+    color: "#777",
+  },
+  modalInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  modalInput: {
+    width: 88,
+    height: 60,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    backgroundColor: "#FAFAF6",
+    textAlign: "center",
+    fontSize: 28,
+    fontFamily: "Pretendard-Bold",
+    color: "#222",
+    paddingVertical: 0,
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+  modalColon: {
+    fontSize: 28,
+    color: "#444",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+  },
+  modalBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBtnSecondary: {
+    backgroundColor: "#FAFAF6",
+    borderWidth: 1.5,
+    borderColor: "#E0E0E0",
+  },
+  modalBtnSecondaryText: {
+    fontSize: 15,
+    color: "#666",
+  },
+  modalBtnPrimaryText: {
+    fontSize: 15,
   },
 
   chipRow: {

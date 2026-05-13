@@ -85,7 +85,17 @@ export default function HomeScreen() {
         ]);
         if (cancelled) return;
         if (me) setNickname(me.nickname);
-        if (petRes) setPet(petRes);
+        if (petRes) {
+          if (__DEV__) {
+            console.log("[home] pet:", {
+              point: petRes.point,
+              level: petRes.level,
+              stage: petRes.stage,
+              streak: petRes.streak,
+            });
+          }
+          setPet(petRes);
+        }
         setHasUnread(
           notifRes ? notifRes.responses.some((n) => !n.isRead) : false,
         );

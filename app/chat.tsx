@@ -56,7 +56,9 @@ export default function ChatScreen() {
   // expo-audio 녹음 훅 — m4a 형식이 chat.ts streamSessionVoiceMessage 기대값과 일치
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
-  // 마운트 시 마이크 권한 + 오디오 모드 준비
+  // 마운트 시 마이크 권한 요청. 오디오 모드는 평소엔 playback 으로 두고
+  // 녹음할 때만 잠깐 recording 모드로 전환 — 안 그러면 TTS 가 통화용 스피커로 흘러
+  // 음량이 거의 안 들림.
   useEffect(() => {
     void (async () => {
       try {
@@ -65,7 +67,7 @@ export default function ChatScreen() {
           console.log("[chat] mic permission denied");
         }
         await setAudioModeAsync({
-          allowsRecording: true,
+          allowsRecording: false,
           playsInSilentMode: true,
         });
       } catch (e) {
@@ -240,6 +242,11 @@ export default function ChatScreen() {
     try {
       void Speech.stop();
       setSpeakingId(null);
+      // 녹음 직전에만 recording 모드로 전환
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
       setRecording(true);
@@ -257,6 +264,13 @@ export default function ChatScreen() {
     setRecording(false);
     try {
       await audioRecorder.stop();
+      // 녹음 끝나면 playback 모드로 복귀 — TTS 가 스피커로 흐르게
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      }).catch(() => {
+        // 모드 전환 실패해도 메시지 전송은 진행
+      });
       const uri = audioRecorder.uri;
       if (!uri) return;
 
