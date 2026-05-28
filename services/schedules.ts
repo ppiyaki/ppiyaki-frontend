@@ -18,7 +18,10 @@ export interface MedicationSchedule {
 export interface CreateScheduleBody {
   /** v0.9.0: 절대 시각 대신 식사 슬롯으로 등록 */
   mealSlot: ServerMealSlot;
+  /** "1정", "10ml" 등 단위 포함 텍스트 */
   dosage: string;
+  /** 1회 복용 수량 (정/캡슐/ml 수) — 백엔드 필수 */
+  dosageQuantity: number;
   daysOfWeek?: string;
   startDate?: string;
   endDate?: string;
@@ -27,9 +30,21 @@ export interface CreateScheduleBody {
 export interface UpdateScheduleBody {
   mealSlot?: ServerMealSlot;
   dosage?: string;
+  dosageQuantity?: number;
   daysOfWeek?: string;
   startDate?: string;
   endDate?: string | null;
+}
+
+/**
+ * dosage 문자열("1정", "1.5캡슐", "10ml" 등)에서 선행 숫자 추출.
+ * 파싱 실패 시 1 (기본값).
+ */
+export function parseDosageQuantity(dosage: string): number {
+  const m = dosage.trim().match(/^(\d+(?:\.\d+)?)/);
+  if (!m) return 1;
+  const n = parseFloat(m[1]);
+  return isNaN(n) || n <= 0 ? 1 : n;
 }
 
 /** 복약 일정 등록 */

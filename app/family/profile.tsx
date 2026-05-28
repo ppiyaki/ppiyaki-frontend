@@ -9,9 +9,11 @@ import {
   listLinkedSeniors,
   unlinkSenior,
 } from "@/services/caregivers";
+import { createSenior } from "@/services/seniors";
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
+import * as Linking from "expo-linking";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -21,11 +23,14 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const SENIOR_AVATAR = require("../../assets/images/pf/pfimg2.png");
+const FEEDBACK_URL =
+  "https://docs.google.com/forms/d/e/1FAIpQLSe0M3RI8XUrQDW8x0x4P_Wa_Dp2BC49hf9YVctUNqUho7VrWA/viewform?pli=1";
 
 // TODO: 백엔드 이메일 필드 추가되면 me.email 사용
 const PLACEHOLDER_EMAIL = "이메일 미연동";
@@ -40,6 +45,7 @@ export default function FamilyProfileScreen() {
   const [seniors, setSeniors] = useState<LinkedSenior[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteSenior, setInviteSenior] = useState<LinkedSenior | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,9 +153,21 @@ export default function FamilyProfileScreen() {
 
         {/* 연동된 시니어 관리 */}
         <View style={styles.section}>
-          <AppText type="pretendard-b" style={styles.sectionTitle}>
-            연동된 시니어 관리
-          </AppText>
+          <View style={styles.sectionTitleRow}>
+            <AppText type="pretendard-b" style={styles.sectionTitle}>
+              연동된 시니어 관리
+            </AppText>
+            <Pressable
+              onPress={() => setAddOpen(true)}
+              hitSlop={10}
+              style={({ pressed }) => [
+                styles.addSeniorBtn,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Ionicons name="add" size={20} color="#5BC4AE" />
+            </Pressable>
+          </View>
           <View style={styles.seniorListCard}>
             {loading && (
               <View style={styles.seniorEmpty}>
@@ -191,7 +209,7 @@ export default function FamilyProfileScreen() {
               icon="restaurant-outline"
               iconColor="#5BC4AE"
               iconBg="#D6F1EA"
-              label="식사시간 설정"
+              label="복약시간 설정"
               onPress={() => router.push("/settings/senior-meal-times" as any)}
             />
             <SettingRow
@@ -206,6 +224,7 @@ export default function FamilyProfileScreen() {
               iconColor="#F8B835"
               iconBg="#FFF1C8"
               label="문의 및 신고"
+              onPress={() => void Linking.openURL(FEEDBACK_URL)}
             />
             <SettingRow
               icon="log-out-outline"
@@ -226,8 +245,251 @@ export default function FamilyProfileScreen() {
       </ScrollView>
 
       <InviteCodeModal senior={inviteSenior} onClose={closeInviteModal} />
+      <AddSeniorModal
+        visible={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCreated={async () => {
+          setAddOpen(false);
+          await load();
+        }}
+      />
     </SafeAreaView>
   );
+}
+
+function AddSeniorModal({
+  visible,
+  onClose,
+  onCreated,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const confirm = useConfirm();
+  const [nickname, setNickname] = useState("");
+  const [year, setYear] = useState("");
+  const [month, setMonth] = useState("");
+  const [day, setDay] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  // 모달 닫힐 때 폼 리셋
+  useEffect(() => {
+    if (!visible) {
+      setNickname("");
+      setYear("");
+      setMonth("");
+      setDay("");
+      setSubmitting(false);
+    }
+  }, [visible]);
+
+  const yearNum = parseInt(year, 10);
+  const monthNum = parseInt(month, 10);
+  const dayNum = parseInt(day, 10);
+  const validDate =
+    !isNaN(yearNum) &&
+    yearNum >= 1900 &&
+    yearNum <= new Date().getFullYear() &&
+    !isNaN(monthNum) &&
+    monthNum >= 1 &&
+    monthNum <= 12 &&
+    !isNaN(dayNum) &&
+    dayNum >= 1 &&
+    dayNum <= 31;
+  const canSubmit = nickname.trim().length > 0 && validDate && !submitting;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    const birthDate = `${String(yearNum).padStart(4, "0")}-${String(
+      monthNum,
+    ).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+    setSubmitting(true);
+    try {
+      await createSenior({ nickname: nickname.trim(), birthDate });
+      onCreated();
+    } catch (e) {
+      const msg =
+        e instanceof ApiError ? e.toUserMessage() : "시니어 추가에 실패했어요";
+      await confirm({
+        title: "추가 실패",
+        message: msg,
+        confirmText: "확인",
+        cancelText: "닫기",
+      });
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={() => {}}>
+          <View style={styles.modalHead}>
+            <AppText type="pretendard-b" style={styles.modalTitle}>
+              시니어 추가
+            </AppText>
+            <Pressable
+              onPress={onClose}
+              hitSlop={10}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={20} color="#666" />
+            </Pressable>
+          </View>
+
+          <AppText type="pretendard-m" style={styles.modalDesc}>
+            관리할 시니어의 정보를 입력해주세요.
+          </AppText>
+
+          <View style={addStyles.fieldGroup}>
+            <AppText type="pretendard-b" style={addStyles.label}>
+              닉네임
+            </AppText>
+            <TextInput
+              value={nickname}
+              onChangeText={setNickname}
+              placeholder="예: 김장군"
+              placeholderTextColor="#BBB"
+              maxLength={10}
+              style={addStyles.input}
+            />
+          </View>
+
+          <View style={addStyles.fieldGroup}>
+            <AppText type="pretendard-b" style={addStyles.label}>
+              생년월일
+            </AppText>
+            <View style={addStyles.dateRow}>
+              <TextInput
+                value={year}
+                onChangeText={(t) =>
+                  setYear(t.replace(/[^0-9]/g, "").slice(0, 4))
+                }
+                keyboardType="number-pad"
+                maxLength={4}
+                placeholder="YYYY"
+                placeholderTextColor="#BBB"
+                style={[addStyles.input, addStyles.dateInputYear]}
+              />
+              <TextInput
+                value={month}
+                onChangeText={(t) =>
+                  setMonth(t.replace(/[^0-9]/g, "").slice(0, 2))
+                }
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="MM"
+                placeholderTextColor="#BBB"
+                style={[addStyles.input, addStyles.dateInputMonthDay]}
+              />
+              <TextInput
+                value={day}
+                onChangeText={(t) =>
+                  setDay(t.replace(/[^0-9]/g, "").slice(0, 2))
+                }
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="DD"
+                placeholderTextColor="#BBB"
+                style={[addStyles.input, addStyles.dateInputMonthDay]}
+              />
+            </View>
+          </View>
+
+          <View style={styles.modalActions}>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.modalCopyBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <AppText type="pretendard-b" style={styles.modalCopyText}>
+                취소
+              </AppText>
+            </Pressable>
+            <Pressable
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              style={({ pressed }) => [
+                styles.modalPrimaryBtn,
+                !canSubmit && styles.modalPrimaryBtnDisabled,
+                pressed && canSubmit && { opacity: 0.85 },
+              ]}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#222" />
+              ) : (
+                <>
+                  <Ionicons name="person-add" size={16} color="#222" />
+                  <AppText type="pretendard-b" style={styles.modalPrimaryText}>
+                    추가하기
+                  </AppText>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const addStyles = StyleSheet.create({
+  fieldGroup: {
+    gap: 6,
+  },
+  label: {
+    fontSize: 14,
+    color: "#444",
+  },
+  input: {
+    height: 46,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    fontFamily: "Pretendard-Medium",
+    color: "#222",
+    backgroundColor: "#FAFAF6",
+    borderWidth: 1,
+    borderColor: "#E5E0CE",
+    borderRadius: 10,
+  },
+  dateRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  dateInputYear: {
+    flex: 1.4,
+    textAlign: "center",
+  },
+  dateInputMonthDay: {
+    flex: 1,
+    textAlign: "center",
+  },
+});
+
+const REISSUE_COOLDOWN_MS = 30_000;
+
+// 모듈 레벨 캐시 — 모달이 unmount돼도 쿨다운/코드가 유지됨.
+// 같은 세션 내에서만 의미 있으면 충분해서 SecureStore 까지는 필요 없음.
+interface InviteCache {
+  data: InviteCodeResponse;
+  issuedAt: number;
+}
+const inviteCache = new Map<number, InviteCache>();
+
+function getRemainingCooldownSec(seniorId: number): number {
+  const c = inviteCache.get(seniorId);
+  if (!c) return 0;
+  const elapsed = Date.now() - c.issuedAt;
+  if (elapsed >= REISSUE_COOLDOWN_MS) return 0;
+  return Math.ceil((REISSUE_COOLDOWN_MS - elapsed) / 1000);
 }
 
 function InviteCodeModal({
@@ -241,7 +503,25 @@ function InviteCodeModal({
   const [data, setData] = useState<InviteCodeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cooldownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startCooldownTicker = (initialSeconds: number) => {
+    setCooldown(initialSeconds);
+    if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+    if (initialSeconds <= 0) return;
+    cooldownTimer.current = setInterval(() => {
+      setCooldown((s) => {
+        if (s <= 1) {
+          if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+          cooldownTimer.current = null;
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  };
 
   const visible = senior !== null;
 
@@ -253,6 +533,8 @@ function InviteCodeModal({
     try {
       const res = await issueInviteCode(sId);
       setData(res);
+      inviteCache.set(sId, { data: res, issuedAt: Date.now() });
+      startCooldownTicker(REISSUE_COOLDOWN_MS / 1000);
     } catch (e) {
       const msg =
         e instanceof ApiError
@@ -265,12 +547,29 @@ function InviteCodeModal({
   };
 
   useEffect(() => {
-    if (senior) {
-      void fetchCode(Number(senior.id));
-    } else {
+    if (!senior) {
       setData(null);
       setError(null);
       setCopied(false);
+      setCooldown(0);
+      if (cooldownTimer.current) {
+        clearInterval(cooldownTimer.current);
+        cooldownTimer.current = null;
+      }
+      return;
+    }
+    const sId = Number(senior.id);
+    const cached = inviteCache.get(sId);
+    const remaining = getRemainingCooldownSec(sId);
+    if (cached && remaining > 0) {
+      // 쿨다운 중이면 캐시된 코드 보여주고 카운트다운만 이어감 — 재발급 호출 X
+      setData(cached.data);
+      setError(null);
+      setCopied(false);
+      startCooldownTicker(remaining);
+    } else {
+      // 캐시 없음 or 쿨다운 끝남 → 새 코드 발급
+      void fetchCode(sId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [senior]);
@@ -278,10 +577,12 @@ function InviteCodeModal({
   useEffect(() => {
     return () => {
       if (copyTimer.current) clearTimeout(copyTimer.current);
+      if (cooldownTimer.current) clearInterval(cooldownTimer.current);
     };
   }, []);
 
   const handleReissue = () => {
+    if (cooldown > 0) return;
     if (senior) void fetchCode(Number(senior.id));
   };
 
@@ -339,7 +640,7 @@ function InviteCodeModal({
                 </AppText>
               </View>
               <AppText type="pretendard-r" style={styles.expiresText}>
-                만료: {formatExpires(data.expiresAt)}
+                {formatExpires(data.expiresAt)}까지 유효해요
               </AppText>
             </>
           )}
@@ -372,14 +673,20 @@ function InviteCodeModal({
             </Pressable>
             <Pressable
               onPress={handleReissue}
+              disabled={cooldown > 0 || loading}
               style={({ pressed }) => [
                 styles.modalPrimaryBtn,
-                pressed && { opacity: 0.85 },
+                (cooldown > 0 || loading) && styles.modalPrimaryBtnDisabled,
+                pressed && cooldown === 0 && !loading && { opacity: 0.85 },
               ]}
             >
-              <Ionicons name="refresh" size={16} color="#222" />
+              <Ionicons
+                name="refresh"
+                size={16}
+                color={cooldown > 0 ? "#888" : "#222"}
+              />
               <AppText type="pretendard-b" style={styles.modalPrimaryText}>
-                재발급
+                {cooldown > 0 ? `재발급 (${cooldown}초)` : "재발급"}
               </AppText>
             </Pressable>
           </View>
@@ -391,9 +698,9 @@ function InviteCodeModal({
 
 function formatExpires(iso: string): string {
   const d = new Date(iso);
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
+  const h = d.getHours();
+  const m = d.getMinutes();
+  return m === 0 ? `${h}시` : `${h}시 ${String(m).padStart(2, "0")}분`;
 }
 
 function SeniorRow({
@@ -543,10 +850,26 @@ const styles = StyleSheet.create({
   section: {
     gap: 10,
   },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
   sectionTitle: {
     fontSize: 18,
     color: "#222",
     paddingHorizontal: 4,
+  },
+  addSeniorBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#E8F7F2",
+    borderWidth: 1.5,
+    borderColor: "#BDEFEA",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   /* ── 시니어 리스트 ── */

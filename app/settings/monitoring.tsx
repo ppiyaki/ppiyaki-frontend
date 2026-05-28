@@ -153,6 +153,9 @@ export default function MonitoringSettingsScreen() {
         familySafetyEnabled: next.familySafetyEnabled,
         familySafetyThresholdHours: next.familySafetyThresholdHours,
         medicationCompleteEnabled: next.medicationCompleteEnabled,
+        // 처방전 검토 요청 알림은 필수라 항상 TRUE 고정.
+        // (백엔드 명세에서 toggle off skip 제거되면 필드 자체 제거 가능)
+        prescriptionReviewRequestEnabled: true,
       });
       setSettings(updated);
     } catch (e) {

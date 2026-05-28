@@ -62,13 +62,16 @@ export async function unlinkSenior(seniorId: number): Promise<void> {
   });
 }
 
-/** 시니어 보호자 승인 모드 변경 (보호자만) */
+/**
+ * 시니어 보호자 승인 모드 변경 (보호자만).
+ * 백엔드가 PATCH 미지원(405) — PUT 사용. 경로/메서드는 백엔드와 재확인 필요.
+ */
 export async function updateSeniorCareMode(
   seniorId: number,
   careMode: CareMode,
 ): Promise<{ userId: number; careMode: CareMode }> {
   return apiFetch(`/api/v1/users/${seniorId}/care-mode`, {
-    method: "PATCH",
+    method: "PUT",
     json: { careMode },
   });
 }

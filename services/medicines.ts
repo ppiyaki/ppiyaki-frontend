@@ -44,12 +44,14 @@ export async function getMedicine(medicineId: number): Promise<Medicine> {
   return apiFetch<Medicine>(`/api/v1/medicines/${medicineId}`);
 }
 
-/** 약물 수동 등록 */
+/** 약물 수동 등록 — 직접 검색·등록 흐름에서 itemSeq 함께 전송 가능. */
 export async function createMedicine(body: {
   seniorId?: number;
   name: string;
   totalAmount: number;
   remainingAmount: number;
+  /** 식약처 약품 마스터 식별자. 검색 결과에서 받은 값 */
+  itemSeq?: string;
   durWarningText?: string;
 }): Promise<Medicine> {
   return apiFetch<Medicine>("/api/v1/medicines", {

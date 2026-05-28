@@ -34,7 +34,7 @@ export async function resolveAuthRoute(): Promise<AuthRoute> {
 }
 
 export const ROUTE_PATHS: Record<AuthRoute, string> = {
-  onboarding: "/signup/nickname",
+  onboarding: "/signup/terms",
   senior: "/(tabs)",
   family: "/family",
 };

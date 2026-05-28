@@ -158,7 +158,8 @@ export default function HomeScreen() {
               pressed && { transform: [{ scale: 0.95 }] },
             ]}
           >
-            <AppText type="pretendard-m" style={styles.bubbleText}>
+            <Ionicons name="chatbubbles" size={22} color="#5A4500" />
+            <AppText type="pretendard-b" style={styles.bubbleText}>
               대화하기
             </AppText>
             <View style={styles.bubbleTail} />
@@ -301,36 +302,39 @@ const styles = StyleSheet.create({
   },
   bubble: {
     position: "absolute",
-    top: 8,
-    right: -30,
-    backgroundColor: "#FFF",
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: "#E8D88C",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    top: 4,
+    right: -36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFD24D",
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: "#E8B935",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
+    elevation: 5,
   },
   bubbleTail: {
     position: "absolute",
-    bottom: -8,
-    left: 20,
+    bottom: -10,
+    left: 24,
     width: 0,
     height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderTopWidth: 8,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderTopWidth: 10,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderTopColor: "#E8D88C",
+    borderTopColor: "#E8B935",
   },
   bubbleText: {
-    fontSize: 14,
-    color: "#333",
+    fontSize: 18,
+    color: "#5A4500",
   },
 
   /* ── 사용자 정보 카드 ── */

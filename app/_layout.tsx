@@ -1,8 +1,10 @@
 import { ConfirmProvider } from "@/contexts/confirm-context";
+import { useNotificationDeepLink } from "@/hooks/use-notification-deep-link";
 import { setupPushAndRegister } from "@/services/push-notifications";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
 import "react-native-reanimated";
@@ -40,6 +42,9 @@ export default function RootLayout() {
     void setupPushAndRegister();
   }, []);
 
+  // 푸시 알림 탭 → 카테고리별 적절한 화면으로 이동 (cold start + 포그라운드/백그라운드 모두 처리)
+  useNotificationDeepLink();
+
   const handleSplashLayout = useCallback(() => {
     void SplashScreen.hideAsync().catch(() => {
       // Ignore duplicate hide calls during fast refresh.
@@ -65,6 +70,8 @@ export default function RootLayout() {
 
   return (
     <ConfirmProvider>
+      {/* 배경이 밝은 크림색이라 기본(light) StatusBar는 흰 아이콘이 안 보임 — dark 강제 */}
+      <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="onboarding" />

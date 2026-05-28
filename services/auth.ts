@@ -34,9 +34,14 @@ export interface MeResponse {
 
 /**
  * 카카오 SDK 로그인 → OIDC idToken 획득 → 백엔드 인증 → 토큰 저장
+ *
+ * `KakaoLogin.login()`(기본)은 디바이스의 카카오톡 앱/카카오계정 세션을 그대로 재사용해서
+ * 로그아웃 직후에도 ID/PW 입력 없이 바로 통과한다. 우리 서비스에서 "로그아웃 = 다른 계정으로
+ * 갈아탈 수 있음"을 보장하려면 매번 카카오계정 페이지로 가서 자격증명을 확인해야 함.
+ * → `loginWithKakaoAccount()` 사용.
  */
 export async function loginWithKakao(): Promise<AuthResponse> {
-  const result = await KakaoLogin.login();
+  const result = await KakaoLogin.loginWithKakaoAccount();
   const idToken = result.idToken;
 
   if (!idToken) {

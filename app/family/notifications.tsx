@@ -19,12 +19,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type FilterKey = "all" | "warning" | "done";
+type FilterKey = "all" | "prescription" | "done" | "warning";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "전체" },
-  { key: "warning", label: "긴급 경고" },
+  { key: "prescription", label: "처방전 검토" },
   { key: "done", label: "복약 완료" },
+  { key: "warning", label: "긴급 경고" },
 ];
 
 const WARNING_CATEGORIES: NotificationCategory[] = [
@@ -33,6 +34,9 @@ const WARNING_CATEGORIES: NotificationCategory[] = [
   "FAMILY_SAFETY",
 ];
 const DONE_CATEGORIES: NotificationCategory[] = ["MEDICATION_COMPLETE"];
+const PRESCRIPTION_CATEGORIES: NotificationCategory[] = [
+  "PRESCRIPTION_REVIEW_REQUEST",
+];
 
 interface DateGroup {
   date: string;
@@ -79,6 +83,12 @@ const ICON_META: Record<NotificationCategory, IconMeta> = {
     color: "#5BC4AE",
     bg: "#D6F1EA",
   },
+  PRESCRIPTION_REVIEW_REQUEST: {
+    family: "ionicons",
+    name: "document-text",
+    color: "#7A6BC9",
+    bg: "#E5E0F5",
+  },
 };
 
 export default function FamilyNotificationsScreen() {
@@ -97,6 +107,12 @@ export default function FamilyNotificationsScreen() {
     try {
       const res = await listNotifications({ size: 50 });
       if (__DEV__) {
+        // 카테고리별 카운트 — PRESCRIPTION_REVIEW_REQUEST 가 응답에 있는지 한눈에 확인
+        const byCategory: Record<string, number> = {};
+        for (const n of res.responses) {
+          byCategory[n.category] = (byCategory[n.category] ?? 0) + 1;
+        }
+        console.log("[family-notif] categories:", byCategory);
         console.log(
           "[family-notif] list response:",
           JSON.stringify(
@@ -125,9 +141,7 @@ export default function FamilyNotificationsScreen() {
       setHasNext(res.hasNext);
     } catch (e) {
       setError(
-        e instanceof ApiError
-          ? e.toUserMessage()
-          : "알림을 불러오지 못했어요",
+        e instanceof ApiError ? e.toUserMessage() : "알림을 불러오지 못했어요",
       );
     } finally {
       setLoading(false);
@@ -158,7 +172,9 @@ export default function FamilyNotificationsScreen() {
   const markRead = async (id: number) => {
     setItems((prev) =>
       prev.map((it) =>
-        it.id === id ? { ...it, isRead: true, readAt: new Date().toISOString() } : it,
+        it.id === id
+          ? { ...it, isRead: true, readAt: new Date().toISOString() }
+          : it,
       ),
     );
     try {
@@ -170,7 +186,9 @@ export default function FamilyNotificationsScreen() {
 
   const markAllRead = async () => {
     const now = new Date().toISOString();
-    setItems((prev) => prev.map((it) => ({ ...it, isRead: true, readAt: now })));
+    setItems((prev) =>
+      prev.map((it) => ({ ...it, isRead: true, readAt: now })),
+    );
     try {
       await markAllNotificationsRead();
     } catch (e) {
@@ -184,8 +202,23 @@ export default function FamilyNotificationsScreen() {
 
   const handleNotifPress = (item: NotificationItem) => {
     if (!item.isRead) void markRead(item.id);
-    if (item.category === "DUR_WARNING" || item.category === "MEDICATION_DELAY") {
+    if (
+      item.category === "DUR_WARNING" ||
+      item.category === "MEDICATION_DELAY"
+    ) {
       router.push("/family/prescriptions" as any);
+    } else if (item.category === "PRESCRIPTION_REVIEW_REQUEST") {
+      const pId = parseFamilyPrescriptionId(item.payload);
+      if (pId != null) {
+        router.push({
+          pathname: "/prescription/review" as any,
+          params: { id: String(pId) },
+        });
+      } else {
+        // 백엔드가 payload에 prescriptionId 를 넣어주기 전까지 임시 fallback —
+        // 처방전 목록 페이지로 이동 (보호자가 PENDING_REVIEW 처방전을 직접 선택).
+        router.push("/family/prescriptions" as any);
+      }
     }
   };
 
@@ -214,27 +247,32 @@ export default function FamilyNotificationsScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.filters}>
-        {FILTERS.map((f) => (
-          <Pressable
-            key={f.key}
-            onPress={() => setFilter(f.key)}
-            style={[
-              styles.filterPill,
-              filter === f.key && styles.filterPillOn,
-            ]}
-          >
-            <AppText
-              type="pretendard-b"
-              style={[
-                styles.filterText,
-                filter === f.key && styles.filterTextOn,
-              ]}
-            >
-              {f.label}
-            </AppText>
-          </Pressable>
-        ))}
+      <View style={styles.filterWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filters}
+        >
+          {FILTERS.map((f) => {
+            const on = filter === f.key;
+            return (
+              <Pressable
+                key={f.key}
+                onPress={() => setFilter(f.key)}
+                style={[styles.filterPill, on && styles.filterPillOn]}
+              >
+                <AppText
+                  // 선택된 탭은 굵게(bold), 비선택은 medium 으로 강약 표현.
+                  // `type` 은 단일 string 만 받으므로 삼항 연산자로 분기해야 함.
+                  type={on ? "pretendard-b" : "pretendard-m"}
+                  style={[styles.filterText, on && styles.filterTextOn]}
+                >
+                  {f.label}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -281,25 +319,6 @@ export default function FamilyNotificationsScreen() {
               ))}
             </View>
           ))}
-
-        {!loading && !error && hasNext && (
-          <Pressable
-            onPress={loadMore}
-            disabled={loadingMore}
-            style={({ pressed }) => [
-              styles.moreBtn,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            {loadingMore ? (
-              <ActivityIndicator size="small" color="#5BC4AE" />
-            ) : (
-              <AppText type="pretendard-b" style={styles.moreBtnText}>
-                더 보기
-              </AppText>
-            )}
-          </Pressable>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -313,6 +332,8 @@ function NotifCard({
   onPress: () => void;
 }) {
   const meta = ICON_META[item.category];
+  const isPrescriptionReview =
+    item.category === "PRESCRIPTION_REVIEW_REQUEST";
   return (
     <Pressable
       onPress={onPress}
@@ -331,7 +352,9 @@ function NotifCard({
           />
         ) : (
           <MaterialCommunityIcons
-            name={meta.name as ComponentProps<typeof MaterialCommunityIcons>["name"]}
+            name={
+              meta.name as ComponentProps<typeof MaterialCommunityIcons>["name"]
+            }
             size={22}
             color={meta.color}
           />
@@ -350,6 +373,20 @@ function NotifCard({
             {item.body}
           </AppText>
         )}
+        {isPrescriptionReview && (
+          <Pressable
+            onPress={onPress}
+            style={({ pressed }) => [
+              styles.reviewBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Ionicons name="document-text" size={14} color="#FFF" />
+            <AppText type="pretendard-b" style={styles.reviewBtnText}>
+              검토하기
+            </AppText>
+          </Pressable>
+        )}
       </View>
       <View style={styles.cardRight}>
         <AppText type="pretendard-m" style={styles.cardTime}>
@@ -361,11 +398,32 @@ function NotifCard({
   );
 }
 
+/** PRESCRIPTION_REVIEW_REQUEST payload에서 prescriptionId 추출. */
+function parseFamilyPrescriptionId(payload: string | null): number | null {
+  if (!payload) return null;
+  try {
+    const obj = JSON.parse(payload) as Record<string, unknown>;
+    const candidates = [obj.prescriptionId, obj.id];
+    for (const c of candidates) {
+      if (typeof c === "number") return c;
+      if (typeof c === "string") {
+        const n = Number(c);
+        if (!isNaN(n)) return n;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function matchesFilter(
   category: NotificationCategory,
   filter: FilterKey,
 ): boolean {
   if (filter === "all") return true;
+  if (filter === "prescription")
+    return PRESCRIPTION_CATEGORIES.includes(category);
   if (filter === "warning") return WARNING_CATEGORIES.includes(category);
   if (filter === "done") return DONE_CATEGORIES.includes(category);
   return true;
@@ -424,15 +482,20 @@ const styles = StyleSheet.create({
   },
   markText: { fontSize: 13, color: "#5BC4AE" },
 
+  // wrapper에 명시적 height — horizontal ScrollView 가 부모 flex column 안에서
+  // 세로로 늘어나는 RN 동작 회피. 빈 상태에서도 필터가 헤더 바로 아래에 고정됨.
+  filterWrap: {
+    height: 62,
+  },
   filters: {
-    flexDirection: "row",
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingVertical: 8,
     gap: 8,
+    alignItems: "center",
   },
   filterPill: {
-    flex: 1,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#F1ECDB",
@@ -440,7 +503,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   filterPillOn: { backgroundColor: "#FFD24D", borderColor: "#FFD24D" },
-  filterText: { fontSize: 14, color: "#777" },
+  // AppText base에 includeFontPadding:false 가 깔려있어 한글 받침이 잘림 →
+  // 명시적 lineHeight + includeFontPadding 복원으로 보정.
+  filterText: {
+    fontSize: 14,
+    color: "#777",
+    lineHeight: 20,
+    includeFontPadding: true,
+  },
   filterTextOn: { color: "#222" },
 
   scroll: { paddingHorizontal: 16, paddingBottom: 24, gap: 18 },
@@ -491,6 +561,21 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: "#FFD24D",
+  },
+  reviewBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#7A6BC9",
+    marginTop: 6,
+  },
+  reviewBtnText: {
+    fontSize: 12,
+    color: "#FFF",
   },
 
   moreBtn: {

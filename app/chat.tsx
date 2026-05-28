@@ -46,7 +46,9 @@ export default function ChatScreen() {
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [sessionId, setSessionId] = useState<number | null>(chatCache.sessionId);
+  const [sessionId, setSessionId] = useState<number | null>(
+    chatCache.sessionId,
+  );
   const [inputOpen, setInputOpen] = useState(false);
   const [inputText, setInputText] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -346,6 +348,14 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <PageHeader title="대화하기" />
+
+      <View style={styles.disclaimer}>
+        <Ionicons name="information-circle" size={14} color="#A07A1A" />
+        <AppText type="pretendard-m" style={styles.disclaimerText}>
+          삐약이의 답변은 참고용이에요.{"\n"}진단·처방은 의사·약사와
+          상담해주세요.
+        </AppText>
+      </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -741,6 +751,25 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 44,
+  },
+
+  /* 면책 배너 */
+  disclaimer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFF4D6",
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#F1ECDB",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  disclaimerText: {
+    flex: 1,
+    fontSize: 11,
+    color: "#8A6F1A",
+    lineHeight: 16,
   },
 
   /* 채팅 */

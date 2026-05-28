@@ -37,7 +37,7 @@ export default function NicknameScreen() {
       style={styles.safe}
       edges={["top", "left", "right", "bottom"]}
     >
-      <SignupProgress step={1} />
+      <SignupProgress step={2} totalSteps={5} />
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === "ios" ? "padding" : "height"}

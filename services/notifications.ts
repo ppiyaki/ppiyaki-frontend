@@ -5,7 +5,9 @@ export type NotificationCategory =
   | "MEDICATION_DELAY"
   | "DUR_WARNING"
   | "FAMILY_SAFETY"
-  | "MEDICATION_COMPLETE";
+  | "MEDICATION_COMPLETE"
+  /** careMode=MANAGED 시니어가 처방전 등록 시 활성 보호자 전원에게 발송 */
+  | "PRESCRIPTION_REVIEW_REQUEST";
 
 export interface NotificationItem {
   id: number;

@@ -1,8 +1,43 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+interface Option {
+  key: "ocr" | "manual";
+  title: string;
+  desc: string;
+  icon: keyof typeof import("@expo/vector-icons/build/Ionicons").default.glyphMap;
+  iconColor: string;
+  iconBg: string;
+  borderColor: string;
+  href: string;
+}
+
+const OPTIONS: Option[] = [
+  {
+    key: "ocr",
+    title: "처방전으로 등록",
+    desc: "사진을 찍으면 자동으로 약 정보를 읽어와요",
+    icon: "camera",
+    iconColor: "#F8B835",
+    iconBg: "#FFF4C7",
+    borderColor: "#FFE9A8",
+    href: "/prescription/camera",
+  },
+  {
+    key: "manual",
+    title: "약 직접 등록",
+    desc: "약 이름을 검색해서 직접 추가할 수 있어요",
+    icon: "search",
+    iconColor: "#5BC4AE",
+    iconBg: "#D6F1EA",
+    borderColor: "#BDEFEA",
+    href: "/prescription/manual-add",
+  },
+];
 
 export default function PrescriptionIntroScreen() {
   const router = useRouter();
@@ -12,39 +47,48 @@ export default function PrescriptionIntroScreen() {
       style={styles.safe}
       edges={["top", "left", "right", "bottom"]}
     >
-      <PageHeader title="처방전 등록" />
+      <PageHeader title="약 등록" />
 
-      <View style={styles.content}>
-        <View style={styles.guideHeader}>
-          {/* <View style={styles.stepBadge}>
-            <AppText type="pretendard-b" style={styles.stepBadgeText}>
-              그림
-            </AppText>
-          </View> */}
-          <AppText type="pretendard-m" style={styles.guideText}>
-            사진을 참고하여 전체 처방전 사진을 찍어주세요.
-          </AppText>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <AppText type="extrabold" style={styles.title}>
+          어떻게 등록할까요?
+        </AppText>
+        <AppText type="pretendard-m" style={styles.desc}>
+          처방전을 찍거나, 약 이름을 직접 검색해서 등록할 수 있어요
+        </AppText>
+
+        <View style={styles.optionList}>
+          {OPTIONS.map((opt) => (
+            <Pressable
+              key={opt.key}
+              onPress={() => router.push(opt.href as any)}
+              style={({ pressed }) => [
+                styles.optionCard,
+                { borderColor: opt.borderColor },
+                pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+              ]}
+            >
+              <View
+                style={[styles.optionIcon, { backgroundColor: opt.iconBg }]}
+              >
+                <Ionicons name={opt.icon} size={26} color={opt.iconColor} />
+              </View>
+              <View style={styles.optionText}>
+                <AppText type="pretendard-b" style={styles.optionTitle}>
+                  {opt.title}
+                </AppText>
+                <AppText type="pretendard-m" style={styles.optionDesc}>
+                  {opt.desc}
+                </AppText>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#BBB" />
+            </Pressable>
+          ))}
         </View>
-
-        <View style={styles.exampleBox}>
-          <Image
-            source={require("../../assets/images/example.png")}
-            style={styles.exampleImage}
-            resizeMode="contain"
-          />
-        </View>
-      </View>
-
-      <View style={styles.footer}>
-        <Pressable
-          onPress={() => router.push("/prescription/camera")}
-          style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
-        >
-          <AppText type="pretendard-b" style={styles.ctaText}>
-            처방전 촬영하기
-          </AppText>
-        </Pressable>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -55,64 +99,52 @@ const styles = StyleSheet.create({
     backgroundColor: "#FDFCF3",
   },
   content: {
-    flex: 1,
-    paddingHorizontal: 20,
+    padding: 20,
+    gap: 16,
   },
-  guideHeader: {
+  title: {
+    fontSize: 24,
+    color: "#171717",
+    marginTop: 8,
+  },
+  desc: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+  optionList: {
+    gap: 12,
+  },
+  optionCard: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    gap: 8,
-  },
-  stepBadge: {
-    backgroundColor: "#F88835",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  stepBadgeText: {
-    color: "#FFF",
-    fontSize: 12,
-  },
-  guideText: {
-    fontSize: 13,
-    color: "#444",
-    flexShrink: 1,
-  },
-  exampleBox: {
-    flex: 1,
+    gap: 14,
     backgroundColor: "#FFF",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#EDE8D6",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderWidth: 1.5,
+    minHeight: 92,
+  },
+  optionIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
-    overflow: "hidden",
   },
-  exampleImage: {
-    width: "100%",
-    height: "100%",
+  optionText: {
+    flex: 1,
+    gap: 4,
   },
-  exampleText: {
-    fontSize: 16,
-    color: "#888",
-  },
-  footer: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  cta: {
-    backgroundColor: "#E8E0C0",
-    borderRadius: 16,
-    paddingVertical: 18,
-    alignItems: "center",
-  },
-  ctaPressed: {
-    opacity: 0.85,
-  },
-  ctaText: {
+  optionTitle: {
     fontSize: 17,
-    color: "#333",
+    color: "#222",
+  },
+  optionDesc: {
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 19,
   },
 });

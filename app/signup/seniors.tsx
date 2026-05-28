@@ -54,7 +54,7 @@ export default function SeniorsScreen() {
       style={styles.safe}
       edges={["top", "left", "right", "bottom"]}
     >
-      <SignupProgress step={2} />
+      <SignupProgress step={3} totalSteps={5} />
       <View style={styles.header}>
         <AppText type="pretendard-b" style={styles.title}>
           관리할 시니어 등록

@@ -14,6 +14,7 @@ import {
   deleteSchedule,
   listSchedules,
   MedicationSchedule,
+  parseDosageQuantity,
 } from "@/services/schedules";
 import {
   getMealTimes,
@@ -104,9 +105,11 @@ export default function MedicationDetailScreen() {
     if (!medicineId || !newSlot) return;
     setAdding(true);
     try {
+      const trimmed = newDosage.trim() || "1정";
       await createSchedule(medicineId, {
         mealSlot: toServerSlot(newSlot),
-        dosage: newDosage.trim() || "1정",
+        dosage: trimmed,
+        dosageQuantity: parseDosageQuantity(trimmed),
       });
       setNewSlot(null);
       setNewDosage("1정");

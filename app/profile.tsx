@@ -7,16 +7,14 @@ import { getMe, logoutKakao } from "@/services/auth";
 import { PetMe, getMyPet } from "@/services/pets";
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
+import * as Linking from "expo-linking";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+const FEEDBACK_URL =
+  "https://docs.google.com/forms/d/e/1FAIpQLSe0M3RI8XUrQDW8x0x4P_Wa_Dp2BC49hf9YVctUNqUho7VrWA/viewform?pli=1";
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
@@ -107,7 +105,7 @@ export default function ProfileScreen() {
       onPress: () => router.push("/settings/edit-profile" as any),
     },
     {
-      label: "식사 시간 설정",
+      label: "복약 시간 설정",
       icon: "time-outline",
       iconColor: "#F8B835",
       iconBg: "#FFF4C7",
@@ -123,8 +121,14 @@ export default function ProfileScreen() {
   ];
 
   const subMenu: SubMenuRow[] = [
-    { label: "내 보호자 정보" },
-    { label: "문의 및 신고" },
+    {
+      label: "내 보호자",
+      onPress: () => router.push("/my-caregivers" as any),
+    },
+    {
+      label: "문의 및 신고",
+      onPress: () => void Linking.openURL(FEEDBACK_URL),
+    },
     { label: "계정 나가기", onPress: handleLogout },
   ];
 

@@ -3,79 +3,6 @@ import PageHeader from "@/components/page-header";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/* 약관 본문은 정적 문자열 — 화면 내부에서만 사용하므로 컴포넌트 외부에 둠. */
-
-interface LawRow {
-  article: string;
-  duty: string;
-  application: string;
-}
-
-const LAW_ROWS: LawRow[] = [
-  {
-    article: "의료법 제27조",
-    duty: "무면허 의료행위 금지",
-    application: "시스템의 안내가 진단/처방이 아닌 ‘참고용’임을 명시",
-  },
-  {
-    article: "개인정보 보호법 제23조",
-    duty: "민감정보 처리 제한",
-    application:
-      "처방전은 환자의 중요한 개인정보이므로, 수집/처리에 대한 명시적 사전 동의를 엄격히 분리하여 받음",
-  },
-  {
-    article: "개인정보 보호법 제17조",
-    duty: "제3자 제공 동의",
-    application: "시니어 데이터를 보호자에게 전송하기 위한 필수 절차",
-  },
-  {
-    article: "약관규제법 제7조",
-    duty: "중과실 면책 금지",
-    application:
-      "회사의 책임을 지우는 대신 ‘사용자 확인 의무’ 및 ‘정보의 단편성’을 반복적으로 고지하여 인과관계를 단절시킴",
-  },
-];
-
-interface ConsentRow {
-  item: string;
-  kind: string;
-  basis: string;
-  data: string;
-}
-
-const CONSENT_ROWS: ConsentRow[] = [
-  {
-    item: "서비스 이용약관",
-    kind: "필수",
-    basis: "약관규제법",
-    data: "이용 규칙, 면책 조항, 자동화 시스템 한계 고지",
-  },
-  {
-    item: "개인정보 수집 및 이용",
-    kind: "필수",
-    basis: "개보법 제15조",
-    data: "닉네임, 가입 식별 정보, 성별, 연동 코드",
-  },
-  {
-    item: "민감정보(건강) 수집",
-    kind: "필수 (별도)",
-    basis: "개보법 제23조",
-    data: "처방전 사진, 약품명, 복약 시간, 질환 정보",
-  },
-  {
-    item: "개인정보 제3자 제공",
-    kind: "필수 (별도)",
-    basis: "개보법 제17조",
-    data: "(제공받는 자: 보호자) 실시간 복약 인증 여부 및 로그",
-  },
-  {
-    item: "광고성 정보 수신",
-    kind: "선택",
-    basis: "정보통신망법",
-    data: "애드몹 보상 안내, 이벤트 및 혜택 푸시",
-  },
-];
-
 interface ArticleSection {
   title: string;
   body: string[];
@@ -116,16 +43,9 @@ const ARTICLES: ArticleSection[] = [
   {
     title: "제5조 (리워드 시스템 및 어뷰징 금지)",
     body: [
-      "1. 사용자는 광고 시청 및 복약 인증을 통해 가상 재화(‘알’)를 획득할 수 있습니다.",
+      "1. 사용자는 복약 인증을 통해 가상 재화(‘알’)를 획득할 수 있습니다.",
       "2. 부정 행위 금지: 약품이 아닌 사물을 촬영하거나, 타인의 사진을 도용하는 등 부정한 방법으로 ‘알’을 획득할 경우, 회사는 사전 통보 없이 해당 계정의 재화를 몰수하고 이용을 제한할 수 있습니다.",
-      "3. 리워드(기프티콘 등)의 제공은 광고 수익 및 회사 정책에 따라 변경되거나 중단될 수 있습니다.",
-    ],
-  },
-  {
-    title: "제6조 (개인정보 수집 동의 및 시스템 고도화 활용)",
-    body: [
-      "1. 처방전 및 복약 관련 정보는 사용자의 민감한 건강 정보에 해당하므로, 회사는 안정적인 서비스 제공을 위해 이에 대한 명시적인 사전 동의를 받습니다.",
-      "2. 사용자가 업로드한 처방전 이미지 및 복약 데이터는 비식별화 처리(개인정보 마스킹)를 거친 후, 서비스의 전산 처리 정밀도 향상 및 자동화 알고리즘 고도화를 위한 분석 자료로 활용될 수 있습니다.",
+      "3. 리워드 정책은 회사 정책에 따라 변경되거나 중단될 수 있습니다.",
     ],
   },
 ];
@@ -136,70 +56,28 @@ export default function TermsScreen() {
       style={styles.safe}
       edges={["top", "left", "right", "bottom"]}
     >
-      <PageHeader title="이용약관" />
+      <PageHeader title="서비스 이용약관" />
 
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator
       >
-        {/* 섹션 1 — 핵심 법 조항 */}
-        <Section title="1. 삐약이 서비스 관련 핵심 법 조항">
-          <AppText type="pretendard-r" style={styles.paragraph}>
-            관련 법령 근거
-          </AppText>
-          <View style={styles.tableCard}>
-            <TableHeader columns={["법 조항", "핵심 준수 사항", "적용 방식"]} />
-            {LAW_ROWS.map((row, idx) => (
-              <TableRow
-                key={row.article}
-                showDivider={idx < LAW_ROWS.length - 1}
-                cells={[row.article, row.duty, row.application]}
-                emphasizeFirst
-              />
-            ))}
-          </View>
-        </Section>
-
-        {/* 섹션 2 — 사용자 동의 명세서 */}
-        <Section title="2. 사용자 동의 명세서 (화면 구현용)">
-          <AppText type="pretendard-r" style={styles.paragraph}>
-            앱 내 가입 단계 또는 처방전 최초 등록 시 화면에 구현해야 할 동의
-            항목 명세입니다.
-          </AppText>
-          <View style={styles.tableCard}>
-            <TableHeader
-              columns={["항목", "동의 종류", "법적 근거", "데이터"]}
-            />
-            {CONSENT_ROWS.map((row, idx) => (
-              <TableRow
-                key={row.item}
-                showDivider={idx < CONSENT_ROWS.length - 1}
-                cells={[row.item, row.kind, row.basis, row.data]}
-                emphasizeFirst
-              />
-            ))}
-          </View>
-        </Section>
-
-        {/* 섹션 3 — 본문 */}
-        <Section title="3. [삐약이] 서비스 이용약관 및 면책 조항">
-          {ARTICLES.map((article) => (
-            <View key={article.title} style={styles.articleBlock}>
-              <AppText type="pretendard-b" style={styles.articleTitle}>
-                {article.title}
+        {ARTICLES.map((article) => (
+          <View key={article.title} style={styles.articleBlock}>
+            <AppText type="pretendard-b" style={styles.articleTitle}>
+              {article.title}
+            </AppText>
+            {article.body.map((line, i) => (
+              <AppText
+                key={`${article.title}-${i}`}
+                type="pretendard-r"
+                style={styles.articleBody}
+              >
+                {line}
               </AppText>
-              {article.body.map((line, i) => (
-                <AppText
-                  key={`${article.title}-${i}`}
-                  type="pretendard-r"
-                  style={styles.articleBody}
-                >
-                  {line}
-                </AppText>
-              ))}
-            </View>
-          ))}
-        </Section>
+            ))}
+          </View>
+        ))}
 
         <View style={styles.footerNote}>
           <AppText type="pretendard-r" style={styles.footerNoteText}>
@@ -211,68 +89,6 @@ export default function TermsScreen() {
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.section}>
-      <AppText type="extrabold" style={styles.sectionTitle}>
-        {title}
-      </AppText>
-      <View style={styles.sectionBody}>{children}</View>
-    </View>
-  );
-}
-
-function TableHeader({ columns }: { columns: string[] }) {
-  return (
-    <View style={styles.tableHeaderRow}>
-      {columns.map((c, i) => (
-        <View
-          key={`${c}-${i}`}
-          style={[styles.tableCell, i === 0 && styles.tableCellFirst]}
-        >
-          <AppText type="pretendard-b" style={styles.tableHeaderText}>
-            {c}
-          </AppText>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function TableRow({
-  cells,
-  showDivider,
-  emphasizeFirst,
-}: {
-  cells: string[];
-  showDivider: boolean;
-  emphasizeFirst?: boolean;
-}) {
-  return (
-    <View style={[styles.tableRow, showDivider && styles.tableRowDivider]}>
-      {cells.map((c, i) => (
-        <View
-          key={`${c}-${i}`}
-          style={[styles.tableCell, i === 0 && styles.tableCellFirst]}
-        >
-          <AppText
-            type={emphasizeFirst && i === 0 ? "pretendard-b" : "pretendard-r"}
-            style={styles.tableCellText}
-          >
-            {c}
-          </AppText>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
@@ -280,65 +96,10 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 16,
-    paddingTop: 4,
+    paddingTop: 8,
     paddingBottom: 32,
-    gap: 18,
-  },
-  section: {
-    gap: 10,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    color: "#171717",
-    paddingHorizontal: 4,
-  },
-  sectionBody: {
     gap: 12,
   },
-  paragraph: {
-    fontSize: 13,
-    color: "#555",
-    lineHeight: 20,
-    paddingHorizontal: 4,
-  },
-
-  tableCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#F1ECDB",
-    overflow: "hidden",
-  },
-  tableHeaderRow: {
-    flexDirection: "row",
-    backgroundColor: "#FFF8E0",
-    paddingVertical: 10,
-  },
-  tableHeaderText: {
-    fontSize: 12,
-    color: "#5A4500",
-  },
-  tableRow: {
-    flexDirection: "row",
-    paddingVertical: 12,
-  },
-  tableRowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1ECDB",
-  },
-  tableCell: {
-    flex: 1,
-    paddingHorizontal: 10,
-  },
-  tableCellFirst: {
-    flex: 1.1,
-  },
-  tableCellText: {
-    fontSize: 12,
-    color: "#333",
-    lineHeight: 18,
-  },
-
   articleBlock: {
     backgroundColor: "#FFF",
     borderRadius: 14,
@@ -356,7 +117,6 @@ const styles = StyleSheet.create({
     color: "#333",
     lineHeight: 20,
   },
-
   footerNote: {
     paddingHorizontal: 4,
     paddingTop: 6,

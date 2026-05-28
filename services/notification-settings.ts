@@ -10,6 +10,8 @@ export interface NotificationSettings {
   familySafetyEnabled: boolean;
   familySafetyThresholdHours: number;
   medicationCompleteEnabled: boolean;
+  /** careMode=MANAGED 시니어 처방전 등록 시 보호자에게 검토 요청 알림 on/off */
+  prescriptionReviewRequestEnabled: boolean;
 }
 
 export interface NotificationSettingsBody {
@@ -19,6 +21,7 @@ export interface NotificationSettingsBody {
   familySafetyEnabled: boolean;
   familySafetyThresholdHours: number;
   medicationCompleteEnabled: boolean;
+  prescriptionReviewRequestEnabled: boolean;
 }
 
 /**

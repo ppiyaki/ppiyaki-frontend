@@ -19,3 +19,29 @@ export async function issueInviteCode(
     json: { seniorId },
   });
 }
+
+export interface LinkedCaregiver {
+  id: number;
+  nickname: string;
+}
+
+/**
+ * 시니어 본인이 자신과 활성 CareRelation으로 연결된 보호자 목록 조회.
+ *  - 403: 호출자가 SENIOR 역할이 아님
+ */
+export async function listLinkedCaregivers(): Promise<LinkedCaregiver[]> {
+  return apiFetch<LinkedCaregiver[]>("/api/v1/care-relations/caregivers");
+}
+
+/**
+ * 시니어가 보호자에게 안부 알림(하트) 전송. 푸시만 발송, 알림함 row 없음.
+ *  - 쿨다운: 수신자별 60초. 429 시 응답 헤더 `Retry-After`에 남은 초.
+ *  - 403 CARE_001: 활성 CareRelation 없음
+ *  - 403 CARE_008: 발신자가 SENIOR가 아니거나 수신자가 CAREGIVER가 아님
+ */
+export async function sendWellbeingPing(caregiverId: number): Promise<void> {
+  await apiFetch<void>("/api/v1/notifications/wellbeing-pings", {
+    method: "POST",
+    json: { caregiverId },
+  });
+}

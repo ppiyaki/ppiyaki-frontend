@@ -149,7 +149,7 @@ export default function NotificationsScreen() {
       style={styles.safe}
       edges={["top", "left", "right", "bottom"]}
     >
-      <SignupProgress step={3} />
+      <SignupProgress step={4} totalSteps={5} />
 
       <View style={styles.header}>
         <AppText type="pretendard-b" style={styles.title}>

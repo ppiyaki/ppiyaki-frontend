@@ -1,11 +1,20 @@
 import AppText from "@/components/app-text";
-import { Image, ImageSourcePropType, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  Image,
+  ImageSourcePropType,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
 
 interface Props {
   name: string;
   caregiver: string;
   daysLeft: number;
   image: ImageSourcePropType;
+  /** 시니어가 여러 명일 때 선택 드롭다운 트리거. 미지정 시 chevron 안 보임. */
+  onPressName?: () => void;
 }
 
 export default function SeniorSummaryHeader({
@@ -13,6 +22,7 @@ export default function SeniorSummaryHeader({
   caregiver,
   daysLeft,
   image,
+  onPressName,
 }: Props) {
   return (
     <View style={styles.row}>
@@ -20,9 +30,26 @@ export default function SeniorSummaryHeader({
         <Image source={image} style={styles.avatar} resizeMode="cover" />
       </View>
       <View style={styles.info}>
-        <AppText type="pretendard-b" style={styles.name} numberOfLines={1}>
-          {name} 님 복약 현황
-        </AppText>
+        <Pressable
+          onPress={onPressName}
+          disabled={!onPressName}
+          hitSlop={6}
+          style={({ pressed }) => [
+            styles.nameRow,
+            pressed && onPressName && { opacity: 0.6 },
+          ]}
+        >
+          <AppText
+            type="pretendard-b"
+            style={styles.name}
+            numberOfLines={1}
+          >
+            {name} 님 복약 현황
+          </AppText>
+          {onPressName && (
+            <Ionicons name="chevron-down" size={18} color="#666" />
+          )}
+        </Pressable>
         <View style={styles.subRow}>
           <AppText
             type="pretendard-m"
@@ -72,9 +99,15 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   name: {
     fontSize: 17,
     color: "#222",
+    flexShrink: 1,
   },
   subRow: {
     flexDirection: "row",

@@ -17,17 +17,43 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const REISSUE_COOLDOWN_SECONDS = 30;
+
 export default function SignupCompleteScreen() {
   const router = useRouter();
   const { issuedCodes, updateIssuedCode } = useSignup();
   const [copiedSeniorId, setCopiedSeniorId] = useState<number | null>(null);
+  const [cooldownMap, setCooldownMap] = useState<Record<number, number>>({});
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
     };
   }, []);
+
+  const ensureCooldownTicker = () => {
+    if (cooldownTimerRef.current) return;
+    cooldownTimerRef.current = setInterval(() => {
+      setCooldownMap((prev) => {
+        const next: Record<number, number> = {};
+        let any = false;
+        for (const [k, v] of Object.entries(prev)) {
+          if (v > 1) {
+            next[Number(k)] = v - 1;
+            any = true;
+          }
+        }
+        if (!any && cooldownTimerRef.current) {
+          clearInterval(cooldownTimerRef.current);
+          cooldownTimerRef.current = null;
+        }
+        return next;
+      });
+    }, 1000);
+  };
 
   const handleCopy = async (seniorId: number, code: string) => {
     await Clipboard.setStringAsync(code);
@@ -40,10 +66,16 @@ export default function SignupCompleteScreen() {
   };
 
   const handleReissue = async (seniorId: number) => {
+    if ((cooldownMap[seniorId] ?? 0) > 0) return;
     updateIssuedCode(seniorId, { inviteCode: null, error: null });
     try {
       const r = await issueInviteCode(seniorId);
       updateIssuedCode(seniorId, { inviteCode: r.inviteCode, error: null });
+      setCooldownMap((prev) => ({
+        ...prev,
+        [seniorId]: REISSUE_COOLDOWN_SECONDS,
+      }));
+      ensureCooldownTicker();
     } catch (err) {
       updateIssuedCode(seniorId, {
         inviteCode: null,
@@ -60,7 +92,7 @@ export default function SignupCompleteScreen() {
       style={styles.safe}
       edges={["top", "left", "right", "bottom"]}
     >
-      <SignupProgress step={4} />
+      <SignupProgress step={5} totalSteps={5} />
 
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -129,14 +161,19 @@ export default function SignupCompleteScreen() {
                 )}
                 <Pressable
                   onPress={() => handleReissue(c.seniorId)}
+                  disabled={(cooldownMap[c.seniorId] ?? 0) > 0}
                   style={({ pressed }) => [
                     styles.codeReissueBtn,
-                    pressed && { opacity: 0.85 },
+                    (cooldownMap[c.seniorId] ?? 0) > 0 && { opacity: 0.5 },
+                    pressed &&
+                      (cooldownMap[c.seniorId] ?? 0) === 0 && { opacity: 0.85 },
                   ]}
                 >
                   <Ionicons name="refresh" size={14} color="#5BC4AE" />
                   <AppText type="pretendard-b" style={styles.codeReissueText}>
-                    재발급
+                    {(cooldownMap[c.seniorId] ?? 0) > 0
+                      ? `재발급 (${cooldownMap[c.seniorId]}초)`
+                      : "재발급"}
                   </AppText>
                 </Pressable>
               </View>

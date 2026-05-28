@@ -3,7 +3,7 @@ import SeniorSummaryHeader from "@/components/senior-summary-header";
 import { useExitOnBack } from "@/hooks/use-exit-on-back";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { getMe } from "@/services/auth";
-import { LinkedSenior, resolveLinkedSenior } from "@/services/caregivers";
+import { LinkedSenior, listLinkedSeniors } from "@/services/caregivers";
 import {
   DailyDashboard,
   DailySlot,
@@ -16,14 +16,15 @@ import { listPrescriptions } from "@/services/prescriptions";
 import { ServerMealSlot } from "@/services/user-settings";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Image,
   ImageSourcePropType,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -115,11 +116,15 @@ export default function FamilyHomeScreen() {
   useExitOnBack();
 
   const [pendingCount, setPendingCount] = useState(0);
-  const [senior, setSenior] = useState<LinkedSenior | null>(null);
+  const [seniors, setSeniors] = useState<LinkedSenior[]>([]);
+  const [selectedSeniorId, setSelectedSeniorId] = useState<number | null>(null);
   const [caregiverName, setCaregiverName] = useState("보호자");
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [daily, setDaily] = useState<DailyDashboard | null>(null);
   const [weekly, setWeekly] = useState<WeeklyDashboard | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const senior = seniors.find((s) => s.id === selectedSeniorId) ?? null;
 
   useFocusEffect(
     useCallback(() => {
@@ -153,7 +158,7 @@ export default function FamilyHomeScreen() {
                 ")",
               );
             }
-            router.replace("/signup/nickname" as any);
+            router.replace("/signup/terms" as any);
             return;
           }
           setCaregiverName(me.nickname);
@@ -162,37 +167,18 @@ export default function FamilyHomeScreen() {
         }
       })();
 
-      // 2) 연결된 시니어 → 약물, 처방전, 대시보드
+      // 2) 연동된 시니어 목록 로드. 선택된 시니어가 있고 여전히 목록에 있으면 유지,
+      //    아니면 첫 번째로 폴백. 시니어 미연동이면 본인 처방전만 카운트.
       (async () => {
         try {
-          const first = await resolveLinkedSenior();
+          const list = await listLinkedSeniors();
           if (cancelled) return;
-          setSenior(first);
-          if (first) {
-            const today = new Date();
-            const todayIso = toIsoDate(today);
-            const weekStartIso = getWeekStart(today);
-            const [meds, pres, dailyRes, weeklyRes] = await Promise.all([
-              listMedicines(first.id).catch(() => ({ responses: [] as Medicine[] })),
-              listPrescriptions("PENDING_REVIEW", first.id).catch(() => ({
-                responses: [],
-              })),
-              getDashboardDaily(first.id, todayIso).catch((e) => {
-                console.log("[family-home] daily dashboard failed:", e);
-                return null;
-              }),
-              getDashboardWeekly(first.id, weekStartIso).catch((e) => {
-                console.log("[family-home] weekly dashboard failed:", e);
-                return null;
-              }),
-            ]);
-            if (cancelled) return;
-            setMedicines(meds.responses);
-            setPendingCount(pres.responses.length);
-            setDaily(dailyRes);
-            setWeekly(weeklyRes);
-          } else {
-            // 시니어 미연동 → 본인 처방전만
+          setSeniors(list);
+          setSelectedSeniorId((prev) => {
+            if (prev != null && list.some((s) => s.id === prev)) return prev;
+            return list[0]?.id ?? null;
+          });
+          if (list.length === 0) {
             try {
               const pres = await listPrescriptions("PENDING_REVIEW");
               if (!cancelled) setPendingCount(pres.responses.length);
@@ -201,9 +187,10 @@ export default function FamilyHomeScreen() {
             }
           }
         } catch (e) {
-          console.log("[family-home] resolveLinkedSenior failed:", e);
+          console.log("[family-home] listLinkedSeniors failed:", e);
           if (!cancelled) {
-            setSenior(null);
+            setSeniors([]);
+            setSelectedSeniorId(null);
             setMedicines([]);
             setDaily(null);
             setWeekly(null);
@@ -217,6 +204,45 @@ export default function FamilyHomeScreen() {
     }, []),
   );
 
+  // 선택된 시니어가 바뀔 때마다 그 시니어의 약물/처방전/대시보드 다시 fetch
+  useEffect(() => {
+    if (selectedSeniorId == null) {
+      setMedicines([]);
+      setDaily(null);
+      setWeekly(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const sId = selectedSeniorId;
+      const today = new Date();
+      const todayIso = toIsoDate(today);
+      const weekStartIso = getWeekStart(today);
+      const [meds, pres, dailyRes, weeklyRes] = await Promise.all([
+        listMedicines(sId).catch(() => ({ responses: [] as Medicine[] })),
+        listPrescriptions("PENDING_REVIEW", sId).catch(() => ({
+          responses: [],
+        })),
+        getDashboardDaily(sId, todayIso).catch((e) => {
+          console.log("[family-home] daily dashboard failed:", e);
+          return null;
+        }),
+        getDashboardWeekly(sId, weekStartIso).catch((e) => {
+          console.log("[family-home] weekly dashboard failed:", e);
+          return null;
+        }),
+      ]);
+      if (cancelled) return;
+      setMedicines(meds.responses);
+      setPendingCount(pres.responses.length);
+      setDaily(dailyRes);
+      setWeekly(weeklyRes);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSeniorId]);
+
   const doses: Dose[] = daily?.slots.map(mapDailySlotToDose) ?? [];
   const completed = doses.filter((d) => d.status === "done").length;
   const streakDays = weekly ? calcStreakFromWeekly(weekly) : 0;
@@ -225,10 +251,10 @@ export default function FamilyHomeScreen() {
   const seniorImage = senior
     ? getSeniorImage(senior.id)
     : FALLBACK_SENIOR_IMAGE;
-  const minRemaining =
-    medicines.length > 0
-      ? Math.min(...medicines.map((m) => m.remainingAmount))
-      : 0;
+  // 백엔드가 dosage 고려해서 계산한 잔여 일수.
+  // 정/캡슐 raw count(`Medicine.remainingAmount`)와 다른 값이라 절대 직접 min 계산 X.
+  // 기록 페이지와 같은 소스를 써서 일치시킴.
+  const remainingDays = daily?.header.remainingDays ?? 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -236,12 +262,15 @@ export default function FamilyHomeScreen() {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        {/* 시니어 요약 카드 */}
+        {/* 시니어 요약 카드 — 2명 이상이면 chevron + 드롭다운 picker 노출 */}
         <SeniorSummaryHeader
           name={seniorName}
           caregiver={caregiverName}
-          daysLeft={minRemaining}
+          daysLeft={remainingDays}
           image={seniorImage}
+          onPressName={
+            seniors.length > 1 ? () => setPickerOpen(true) : undefined
+          }
         />
 
         {/* 검토 대기 처방전 카드 */}
@@ -390,7 +419,9 @@ export default function FamilyHomeScreen() {
                   {medicines[0].name}
                 </AppText>
                 <AppText type="pretendard-m" style={styles.medRemaining}>
-                  잔여 {medicines[0].remainingAmount}일분
+                  {/* remainingAmount는 정/캡슐 raw 개수. "일분"으로 표시하면
+                      잔여 일수와 혼동되므로 단순 개수로 표기. */}
+                  잔여 {medicines[0].remainingAmount}개
                   {medicines.length > 1
                     ? ` · 외 ${medicines.length - 1}종`
                     : ""}
@@ -401,6 +432,59 @@ export default function FamilyHomeScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <Pressable
+          style={styles.pickerBackdrop}
+          onPress={() => setPickerOpen(false)}
+        >
+          <Pressable style={styles.pickerSheet} onPress={() => {}}>
+            <AppText type="pretendard-b" style={styles.pickerTitle}>
+              시니어 선택
+            </AppText>
+            {seniors.map((s) => {
+              const on = s.id === selectedSeniorId;
+              return (
+                <Pressable
+                  key={s.id}
+                  onPress={() => {
+                    setSelectedSeniorId(s.id);
+                    setPickerOpen(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.pickerRow,
+                    on && styles.pickerRowOn,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <View style={styles.pickerAvatarRing}>
+                    <Image
+                      source={getSeniorImage(s.id)}
+                      style={styles.pickerAvatar}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <AppText
+                    type={on ? "pretendard-b" : "pretendard-m"}
+                    style={[styles.pickerName, on && styles.pickerNameOn]}
+                    numberOfLines={1}
+                  >
+                    {s.nickname}
+                  </AppText>
+                  {on && (
+                    <Ionicons name="checkmark" size={20} color="#5BC4AE" />
+                  )}
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -737,5 +821,63 @@ const styles = StyleSheet.create({
   medEmptyText: {
     fontSize: 13,
     color: "#888",
+  },
+
+  /* ── 시니어 선택 picker ── */
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  pickerSheet: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#FFF",
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    gap: 10,
+  },
+  pickerTitle: {
+    fontSize: 18,
+    color: "#222",
+    marginBottom: 6,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+    backgroundColor: "#FFF",
+  },
+  pickerRowOn: {
+    borderColor: "#5BC4AE",
+    backgroundColor: "#F4FBF9",
+  },
+  pickerAvatarRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+  },
+  pickerAvatar: {
+    width: "100%",
+    height: "100%",
+  },
+  pickerName: {
+    flex: 1,
+    fontSize: 16,
+    color: "#444",
+  },
+  pickerNameOn: {
+    color: "#222",
   },
 });
