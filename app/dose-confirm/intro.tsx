@@ -1,5 +1,9 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import { useConfirm } from "@/contexts/confirm-context";
+import { ApiError } from "@/services/api";
+import { getMe } from "@/services/auth";
+import { upsertMedicationLog } from "@/services/medication-logs";
 import { listMedicines } from "@/services/medicines";
 import { listSchedules } from "@/services/schedules";
 import {
@@ -87,6 +91,7 @@ function pickActiveSlot(
 
 export default function DoseConfirmIntroScreen() {
   const router = useRouter();
+  const confirm = useConfirm();
   const { scheduleId: paramScheduleId, targetDate: paramTargetDate } =
     useLocalSearchParams<{
       scheduleId?: string;
@@ -97,6 +102,20 @@ export default function DoseConfirmIntroScreen() {
   );
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(!paramScheduleId);
+  const [canSkipPhoto, setCanSkipPhoto] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+
+  // 시니어가 AUTONOMOUS 모드면 사진 없이 인증 허용
+  useEffect(() => {
+    void (async () => {
+      try {
+        const me = await getMe();
+        setCanSkipPhoto(me.careMode === "AUTONOMOUS");
+      } catch (e) {
+        console.log("[dose-confirm/intro] getMe failed:", e);
+      }
+    })();
+  }, []);
 
   // scheduleId 가 안 넘어왔으면 현재 시각 기준으로 추론
   useEffect(() => {
@@ -158,6 +177,35 @@ export default function DoseConfirmIntroScreen() {
   const scheduleId = resolvedScheduleId;
   const targetDate = paramTargetDate ?? todayIso();
 
+  const handleSkipPhoto = async () => {
+    if (!scheduleId || skipping) return;
+    const ok = await confirm({
+      title: "사진 없이 인증할까요?",
+      message: "사진 없이 복약을 완료 처리해요.",
+      confirmText: "인증하기",
+    });
+    if (!ok) return;
+    setSkipping(true);
+    try {
+      await upsertMedicationLog({
+        scheduleId: Number(scheduleId),
+        targetDate,
+        status: "TAKEN",
+      });
+      router.replace("/dose-confirm/success" as any);
+    } catch (e) {
+      const msg =
+        e instanceof ApiError ? e.toUserMessage() : "복약 인증에 실패했어요";
+      await confirm({
+        title: "인증 실패",
+        message: msg,
+        confirmText: "확인",
+        cancelText: "닫기",
+      });
+      setSkipping(false);
+    }
+  };
+
   return (
     <SafeAreaView
       style={styles.safe}
@@ -216,11 +264,11 @@ export default function DoseConfirmIntroScreen() {
               params: { scheduleId, targetDate },
             });
           }}
-          disabled={resolving || !scheduleId}
+          disabled={resolving || !scheduleId || skipping}
           style={({ pressed }) => [
             styles.btn,
-            (resolving || !scheduleId) && styles.btnDisabled,
-            pressed && scheduleId && { opacity: 0.85 },
+            (resolving || !scheduleId || skipping) && styles.btnDisabled,
+            pressed && scheduleId && !skipping && { opacity: 0.85 },
           ]}
         >
           {resolving ? (
@@ -234,6 +282,28 @@ export default function DoseConfirmIntroScreen() {
             </>
           )}
         </Pressable>
+        {canSkipPhoto && (
+          <Pressable
+            onPress={handleSkipPhoto}
+            disabled={resolving || !scheduleId || skipping}
+            style={({ pressed }) => [
+              styles.skipBtn,
+              (resolving || !scheduleId || skipping) && { opacity: 0.5 },
+              pressed && !skipping && { opacity: 0.7 },
+            ]}
+          >
+            {skipping ? (
+              <ActivityIndicator color="#666" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle-outline" size={20} color="#666" />
+                <AppText type="pretendard-b" style={styles.skipBtnText}>
+                  사진 없이 인증하기
+                </AppText>
+              </>
+            )}
+          </Pressable>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -313,6 +383,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 16,
+    gap: 10,
   },
   btn: {
     flexDirection: "row",
@@ -329,6 +400,21 @@ const styles = StyleSheet.create({
   btnText: {
     fontSize: 18,
     color: "#222",
+  },
+  skipBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#FFF",
+    borderWidth: 1.5,
+    borderColor: "#E5E0CE",
+  },
+  skipBtnText: {
+    fontSize: 15,
+    color: "#444",
   },
   resolveError: {
     color: "#E14B4B",

@@ -1,5 +1,9 @@
 import { getMe } from "./auth";
-import { syncMealTimesFromServer } from "./user-settings";
+import {
+  DEFAULT_MEAL_TIMES,
+  setMealTimes,
+  syncMealTimesFromServer,
+} from "./user-settings";
 
 export type AuthRoute = "onboarding" | "senior" | "family";
 
@@ -9,11 +13,21 @@ export type AuthRoute = "onboarding" | "senior" | "family";
  * - role=SENIOR → 시니어 메인
  * - 그 외 (CAREGIVER/FAMILY 등) → 보호자 메인
  *
- * 부수 효과: mealTimes를 로컬 캐시에 동기화한다.
+ * 부수 효과:
+ *  1) mealTimes를 로컬 캐시에 동기화한다.
+ *  2) 시니어 본인이고 서버 mealTimes가 null이면 디폴트 값을 자동 PUT.
+ *     (백엔드가 디폴트 INSERT를 처리하기 전까지의 워크어라운드)
  */
 export async function resolveAuthRoute(): Promise<AuthRoute> {
   const me = await getMe();
   await syncMealTimesFromServer(me.mealTimes);
+  if (me.role === "SENIOR" && !me.mealTimes) {
+    try {
+      await setMealTimes(DEFAULT_MEAL_TIMES);
+    } catch (e) {
+      console.log("[post-login] default mealTimes seed failed:", e);
+    }
+  }
   if (!me.isOnboarded) return "onboarding";
   if (me.role === "SENIOR") return "senior";
   return "family";

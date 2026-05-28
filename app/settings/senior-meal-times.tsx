@@ -2,18 +2,19 @@ import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
+import { LinkedSenior, listLinkedSeniors } from "@/services/caregivers";
 import {
   DEFAULT_MEAL_TIMES,
-  getMealTimes,
   MealSlot,
   MealTimes,
-  setMealTimes,
+  setSeniorMealTimes,
 } from "@/services/user-settings";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -23,6 +24,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const FALLBACK_IMG = require("../../assets/images/pf/pfimg2.png");
+
 const SLOT_META: Record<
   MealSlot,
   {
@@ -30,7 +33,7 @@ const SLOT_META: Record<
     icon: keyof typeof Ionicons.glyphMap;
     color: string;
     bg: string;
-    options: string[]; // "HH:mm"
+    options: string[];
   }
 > = {
   morning: {
@@ -38,7 +41,7 @@ const SLOT_META: Record<
     icon: "sunny",
     color: "#F8B835",
     bg: "#FFF4D6",
-    options: generateOptions(6, 10), // 06:00 ~ 10:00
+    options: generateOptions(6, 10),
   },
   noon: {
     label: "점심",
@@ -67,31 +70,40 @@ function generateOptions(startHour: number, endHour: number): string[] {
   return result;
 }
 
-export default function MealTimesScreen() {
+export default function SeniorMealTimesScreen() {
   const router = useRouter();
   const confirm = useConfirm();
 
+  const [seniors, setSeniors] = useState<LinkedSenior[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [times, setTimes] = useState<MealTimes>(DEFAULT_MEAL_TIMES);
   const [initial, setInitial] = useState<MealTimes>(DEFAULT_MEAL_TIMES);
-  const [loading, setLoading] = useState(true);
+  const [loadingList, setLoadingList] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const t = await getMealTimes();
-      setTimes(t);
-      setInitial(t);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    void (async () => {
+      try {
+        const list = await listLinkedSeniors();
+        setSeniors(list);
+        if (list[0]) setSelectedId(list[0].id);
+        if (list.length === 0) setError("연동된 시니어가 없어요");
+      } catch (e) {
+        console.log("[senior-meal-times] listLinkedSeniors failed:", e);
+        setError("시니어 정보를 불러오지 못했어요");
+      } finally {
+        setLoadingList(false);
+      }
+    })();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
+  // 시니어 변경 시 폼 리셋 (서버에서 현재 시간을 가져올 GET이 없어 기본값으로 시작)
+  useEffect(() => {
+    if (selectedId == null) return;
+    setTimes(DEFAULT_MEAL_TIMES);
+    setInitial(DEFAULT_MEAL_TIMES);
+  }, [selectedId]);
 
   const dirty =
     times.morning !== initial.morning ||
@@ -99,14 +111,17 @@ export default function MealTimesScreen() {
     times.night !== initial.night;
 
   const handleSave = async () => {
-    if (!dirty) {
-      router.back();
-      return;
-    }
+    if (selectedId == null || !dirty) return;
     setSaving(true);
     try {
-      await setMealTimes(times);
-      router.back();
+      await setSeniorMealTimes(selectedId, times);
+      setInitial(times);
+      await confirm({
+        title: "저장 완료",
+        message: "시니어의 복약 시간이 저장됐어요",
+        confirmText: "확인",
+        cancelText: "닫기",
+      });
     } catch (e) {
       const msg =
         e instanceof ApiError ? e.toUserMessage() : "저장에 실패했어요";
@@ -116,6 +131,7 @@ export default function MealTimesScreen() {
         confirmText: "확인",
         cancelText: "닫기",
       });
+    } finally {
       setSaving(false);
     }
   };
@@ -139,11 +155,18 @@ export default function MealTimesScreen() {
       style={styles.safe}
       edges={["top", "left", "right", "bottom"]}
     >
-      <PageHeader title="복약 시간 설정" onBack={handleBack} />
+      <PageHeader title="복약시간 설정" onBack={handleBack} />
 
-      {loading ? (
+      {loadingList ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color="#FFD24D" />
+        </View>
+      ) : error && seniors.length === 0 ? (
+        <View style={styles.stateBox}>
+          <Ionicons name="alert-circle" size={28} color="#E14B4B" />
+          <AppText type="pretendard-m" style={styles.stateText}>
+            {error}
+          </AppText>
         </View>
       ) : (
         <>
@@ -151,6 +174,38 @@ export default function MealTimesScreen() {
             contentContainerStyle={styles.scroll}
             showsVerticalScrollIndicator={false}
           >
+            <View style={styles.section}>
+              <AppText type="pretendard-b" style={styles.sectionTitle}>
+                관리 중인 시니어
+              </AppText>
+              <View style={styles.seniorRow}>
+                {seniors.map((senior) => {
+                  const on = senior.id === selectedId;
+                  return (
+                    <Pressable
+                      key={senior.id}
+                      onPress={() => setSelectedId(senior.id)}
+                      style={[styles.seniorCard, on && styles.seniorCardOn]}
+                    >
+                      <View style={styles.seniorAvatar}>
+                        <Image
+                          source={FALLBACK_IMG}
+                          style={styles.seniorImg}
+                          resizeMode="cover"
+                        />
+                      </View>
+                      <AppText
+                        type="pretendard-b"
+                        style={[styles.seniorName, on && styles.seniorNameOn]}
+                      >
+                        {senior.nickname}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
             <AppText type="extrabold" style={styles.title}>
               평소 식사 후 복약 시간을 알려주세요
             </AppText>
@@ -172,16 +227,20 @@ export default function MealTimesScreen() {
           <View style={styles.footer}>
             <Pressable
               onPress={handleSave}
-              disabled={saving}
+              disabled={saving || !dirty || selectedId == null}
               style={({ pressed }) => [
                 styles.btn,
-                !dirty && styles.btnSecondary,
+                (!dirty || selectedId == null) && styles.btnSecondary,
                 pressed && { opacity: 0.85 },
               ]}
             >
               <AppText
                 type="pretendard-b"
-                style={dirty ? styles.btnText : styles.btnSecondaryText}
+                style={
+                  dirty && selectedId != null
+                    ? styles.btnText
+                    : styles.btnSecondaryText
+                }
               >
                 {saving ? "저장 중..." : dirty ? "저장하기" : "변경사항 없음"}
               </AppText>
@@ -206,7 +265,6 @@ function SlotPicker({
   const scrollRef = useRef<ScrollView>(null);
   const [editing, setEditing] = useState(false);
 
-  // 선택 변경 시 가운데로 자동 스크롤
   useEffect(() => {
     const idx = meta.options.indexOf(value);
     if (idx < 0) return;
@@ -288,7 +346,6 @@ function SlotPicker({
   );
 }
 
-/** HH:mm 직접 입력 모달 — 시·분 따로 받음. */
 function TimeEditModal({
   visible,
   label,
@@ -309,7 +366,6 @@ function TimeEditModal({
   const [hour, setHour] = useState("");
   const [minute, setMinute] = useState("");
 
-  // 모달 열릴 때마다 initial 로 reset
   useEffect(() => {
     if (visible) {
       const [h, m] = initial.split(":");
@@ -434,12 +490,55 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  stateBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  stateText: { fontSize: 14, color: "#888" },
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 24,
     gap: 14,
   },
+  section: { gap: 10 },
+  sectionTitle: {
+    fontSize: 17,
+    color: "#222",
+    paddingHorizontal: 4,
+  },
+
+  seniorRow: { flexDirection: "row", gap: 10 },
+  seniorCard: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: "#F1ECDB",
+    backgroundColor: "#FFF",
+    gap: 8,
+  },
+  seniorCardOn: {
+    borderColor: "#5BC4AE",
+    backgroundColor: "#E8F7F2",
+  },
+  seniorAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#FFF",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+  },
+  seniorImg: { width: "100%", height: "100%" },
+  seniorName: { fontSize: 15, color: "#444" },
+  seniorNameOn: { color: "#222" },
+
   title: {
     fontSize: 24,
     color: "#222",
@@ -492,7 +591,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  /* 시간 직접 입력 모달 */
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",

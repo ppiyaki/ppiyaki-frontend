@@ -42,7 +42,9 @@ const STORAGE_KEY = "meal_times";
 /* ────────────────── 서버 ↔ 로컬 변환 ────────────────── */
 
 /** 서버 형식("HH:mm:ss" + breakfast/lunch/dinner) → 로컬 형식 */
-export function fromServerMealTimes(s: ServerMealTimes | null | undefined): MealTimes {
+export function fromServerMealTimes(
+  s: ServerMealTimes | null | undefined,
+): MealTimes {
   if (!s) return DEFAULT_MEAL_TIMES;
   return {
     morning: (s.breakfast ?? "08:00:00").slice(0, 5),
@@ -100,6 +102,21 @@ export async function setMealTimes(times: MealTimes): Promise<void> {
   await cacheMealTimesLocally(times);
 }
 
+/**
+ * 보호자가 연결된 시니어의 식사 시간을 갱신.
+ *  - 403 CARE_001: 활성 CareRelation 없음
+ *  - 404 USER_001: seniorId 미존재
+ */
+export async function setSeniorMealTimes(
+  seniorId: number,
+  times: MealTimes,
+): Promise<void> {
+  await apiFetch(`/api/v1/users/${seniorId}/meal-times`, {
+    method: "PUT",
+    json: toServerMealTimes(times),
+  });
+}
+
 /** /me 응답의 mealTimes를 로컬 캐시에 저장 (앱 진입/dev-login 후 호출) */
 export async function syncMealTimesFromServer(
   serverMealTimes: ServerMealTimes | null | undefined,
@@ -130,9 +147,15 @@ function cyclicDiff(a: number, b: number): number {
 export function timeToSlot(time: string, meals: MealTimes): MealSlot {
   const target = parseTimeToMinutes(time.slice(0, 5));
   const candidates: { slot: MealSlot; diff: number }[] = [
-    { slot: "morning", diff: cyclicDiff(target, parseTimeToMinutes(meals.morning)) },
+    {
+      slot: "morning",
+      diff: cyclicDiff(target, parseTimeToMinutes(meals.morning)),
+    },
     { slot: "noon", diff: cyclicDiff(target, parseTimeToMinutes(meals.noon)) },
-    { slot: "night", diff: cyclicDiff(target, parseTimeToMinutes(meals.night)) },
+    {
+      slot: "night",
+      diff: cyclicDiff(target, parseTimeToMinutes(meals.night)),
+    },
   ];
   candidates.sort((a, b) => a.diff - b.diff);
   return candidates[0].slot;

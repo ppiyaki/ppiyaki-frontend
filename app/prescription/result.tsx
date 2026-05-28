@@ -35,6 +35,16 @@ export default function PrescriptionResultScreen() {
     setLoading(true);
     try {
       const data = await getPrescription(prescriptionId);
+      // OCR 추출 결과가 0개면 검토 불가 — 폐기 후 실패 화면으로
+      if (data.candidates.length === 0) {
+        try {
+          await discardPrescription(prescriptionId);
+        } catch (e) {
+          console.log("[prescription/result] empty discard failed:", e);
+        }
+        router.replace("/prescription/failed");
+        return;
+      }
       setDetail(data);
     } catch {
       router.replace("/prescription/failed");

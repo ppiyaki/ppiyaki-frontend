@@ -3,7 +3,11 @@ import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { ApiError } from "@/services/api";
 import type { CareMode } from "@/services/auth";
-import { LinkedSenior, listLinkedSeniors } from "@/services/caregivers";
+import {
+  LinkedSenior,
+  listLinkedSeniors,
+  updateSeniorCareMode,
+} from "@/services/caregivers";
 import {
   NotificationSettings,
   applyNotificationPreset,
@@ -180,12 +184,38 @@ export default function MonitoringSettingsScreen() {
     void persistFull(next);
   };
 
+  const selectedSenior = seniors.find((s) => s.id === selectedId) ?? null;
+  const currentCareMode: CareMode | null = selectedSenior?.careMode ?? null;
+
+  const setSeniorCareMode = async (mode: CareMode) => {
+    if (selectedId == null || currentCareMode === mode) return;
+    // 낙관적 갱신
+    setSeniors((prev) =>
+      prev.map((s) => (s.id === selectedId ? { ...s, careMode: mode } : s)),
+    );
+    try {
+      await updateSeniorCareMode(selectedId, mode);
+    } catch (e) {
+      console.log("[monitoring] careMode update failed:", e);
+      // 실패 시 목록 재조회로 원복
+      try {
+        const list = await listLinkedSeniors();
+        setSeniors(list);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
   const applyPreset = async (careMode: CareMode) => {
     if (selectedId == null) return;
     setSaving(true);
     try {
       const updated = await applyNotificationPreset(selectedId, careMode);
       setSettings(updated);
+      // 프리셋과 careMode를 동기화 — AUTONOMOUS 프리셋이면 careMode도 AUTONOMOUS (사진 인증 여유),
+      // MANAGED 프리셋이면 MANAGED (사진 인증 강제).
+      void setSeniorCareMode(careMode);
     } catch (e) {
       console.log("[monitoring] preset apply failed:", e);
     } finally {
@@ -351,6 +381,36 @@ export default function MonitoringSettingsScreen() {
                   </AppText>
                 </View>
                 <View style={styles.settingsCard}>
+                  {group.title === "복약 알림" && (
+                    <View
+                      style={[styles.settingRow, styles.settingRowDivider]}
+                    >
+                      <View style={styles.settingText}>
+                        <AppText
+                          type="pretendard-b"
+                          style={styles.settingLabel}
+                        >
+                          복약 인증 강제
+                        </AppText>
+                        <AppText
+                          type="pretendard-m"
+                          style={styles.settingDesc}
+                        >
+                          켜두면 사진 인증 필수, 끄면 사진 없이도 인증 가능해요
+                        </AppText>
+                      </View>
+                      <AnimatedToggle
+                        value={currentCareMode === "MANAGED"}
+                        onChange={() =>
+                          void setSeniorCareMode(
+                            currentCareMode === "MANAGED"
+                              ? "AUTONOMOUS"
+                              : "MANAGED",
+                          )
+                        }
+                      />
+                    </View>
+                  )}
                   {group.rows.map((row, idx) => (
                     <View
                       key={row.key}

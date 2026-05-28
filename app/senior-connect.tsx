@@ -2,6 +2,7 @@ import AppText from "@/components/app-text";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
 import { loginWithInviteCode } from "@/services/auth";
+import { resolveAuthRoute, ROUTE_PATHS } from "@/services/post-login";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
@@ -28,8 +29,10 @@ export default function SeniorConnectScreen() {
     if (!canConnect) return;
     setSubmitting(true);
     try {
-      await loginWithInviteCode(code);
-      router.replace("/(tabs)" as any);
+      await loginWithInviteCode(code.toUpperCase());
+      // mealTimes 디폴트 자동 푸시 등 post-login 부수효과 수행 후 라우팅
+      const route = await resolveAuthRoute();
+      router.replace(ROUTE_PATHS[route] as any);
     } catch (e) {
       const status = e instanceof ApiError ? e.status : 0;
       const msg =
@@ -153,10 +156,13 @@ function OtpInput({
       <TextInput
         ref={inputRef}
         value={value}
-        onChangeText={(t) => onChange(t.replace(/\s/g, "").toUpperCase())}
+        // RN 안드로이드 controlled TextInput 버그: onChangeText 내부에서 toUpperCase 같은
+        // 변환을 하면 사용자가 친 raw 텍스트와 value prop이 어긋나 한 글자가 중복 입력됨.
+        // 대문자 변환은 표시/제출 시점에만 수행한다.
+        onChangeText={(t) => onChange(t.replace(/\s/g, ""))}
         maxLength={6}
         keyboardType="default"
-        autoCapitalize="characters"
+        autoCapitalize="none"
         autoCorrect={false}
         caretHidden
         style={otp.hidden}
@@ -175,7 +181,7 @@ function OtpInput({
               ]}
             >
               <AppText type="extrabold" style={otp.char}>
-                {value[i] ?? ""}
+                {value[i]?.toUpperCase() ?? ""}
               </AppText>
             </View>
           );

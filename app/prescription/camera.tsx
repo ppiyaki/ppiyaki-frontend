@@ -22,9 +22,12 @@ export default function PrescriptionCameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  // 동기 락 — React state는 setState 호출 후 다음 렌더까지 갱신되지 않아 빠른 더블탭이 모두 가드를 통과함.
+  const capturingRef = useRef(false);
 
   const handleCapture = async () => {
-    if (phase !== "idle") return;
+    if (capturingRef.current || phase !== "idle") return;
+    capturingRef.current = true;
     setError(null);
 
     // ── 1) 사진 촬영
@@ -38,10 +41,12 @@ export default function PrescriptionCameraScreen() {
     } catch (e) {
       console.log("[prescription] 1) takePictureAsync error:", e);
       setError(`사진 촬영 실패: ${formatError(e)}`);
+      capturingRef.current = false;
       return;
     }
     if (!photoUri) {
       setError("사진을 가져오지 못했어요 (uri null)");
+      capturingRef.current = false;
       return;
     }
 
@@ -55,6 +60,7 @@ export default function PrescriptionCameraScreen() {
       console.log("[prescription] 2) upload error:", e);
       setPhase("idle");
       setError(`업로드 실패: ${formatError(e)}`);
+      capturingRef.current = false;
       return;
     }
 
@@ -71,10 +77,13 @@ export default function PrescriptionCameraScreen() {
         pathname: "/prescription/result",
         params: { id: String(detail.id) },
       });
+      // 성공 시에는 화면을 떠나므로 락 해제 불필요. 그래도 방어적으로 풀어둠.
+      capturingRef.current = false;
     } catch (e) {
       console.log("[prescription] 3) register error:", e);
       setPhase("idle");
       setError(`OCR 등록 실패: ${formatError(e)}`);
+      capturingRef.current = false;
     }
   };
 

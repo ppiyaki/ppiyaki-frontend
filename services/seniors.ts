@@ -4,7 +4,7 @@ export interface CreateSeniorBody {
   /** 시니어 닉네임 */
   nickname: string;
   /** 생년월일 yyyy-MM-dd */
-  dob: string;
+  birthDate: string;
 }
 
 export interface CreateSeniorResponse {

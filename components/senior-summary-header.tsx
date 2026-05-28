@@ -37,7 +37,7 @@ export default function SeniorSummaryHeader({
               style={styles.daysLabel}
               numberOfLines={1}
             >
-              남은 복약일 수:{" "}
+              약 잔여량:{" "}
             </AppText>
             <AppText type="extrabold" style={styles.daysNum}>
               {daysLeft}일

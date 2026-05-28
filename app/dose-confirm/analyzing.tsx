@@ -69,8 +69,8 @@ export default function DoseConfirmAnalyzingScreen() {
           photoObjectKey: objectKey,
         });
 
-        // 3) aiStatus 분기 (사용자 결정 옵션 1: COUNT_MISMATCH만 issue)
-        if (log.aiStatus === "COUNT_MISMATCH") {
+        // 3) pillCountStatus 분기 (사용자 결정 옵션 1: COUNT_MISMATCH만 issue)
+        if (log.pillCountStatus === "COUNT_MISMATCH") {
           router.replace({
             pathname: "/dose-confirm/issue" as any,
             params: {

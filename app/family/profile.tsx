@@ -188,6 +188,13 @@ export default function FamilyProfileScreen() {
               onPress={() => router.push("/settings/monitoring" as any)}
             />
             <SettingRow
+              icon="restaurant-outline"
+              iconColor="#5BC4AE"
+              iconBg="#D6F1EA"
+              label="식사시간 설정"
+              onPress={() => router.push("/settings/senior-meal-times" as any)}
+            />
+            <SettingRow
               icon="information-circle-outline"
               iconColor="#F8B835"
               iconBg="#FFF1C8"

@@ -28,6 +28,8 @@ export interface MeResponse {
   role: UserRole | null;
   isOnboarded: boolean;
   mealTimes?: ServerMealTimes | null;
+  /** 시니어인 경우에만 채워짐. 보호자가 관리/자율 모드를 설정. */
+  careMode?: CareMode | null;
 }
 
 /**

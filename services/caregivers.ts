@@ -7,7 +7,7 @@ export interface LinkedSenior {
   id: number;
   nickname: string;
   /** yyyy-MM-dd */
-  dob: string;
+  birthDate: string;
   gender: SeniorGender;
   careMode: CareMode;
 }

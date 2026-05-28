@@ -1,7 +1,7 @@
 import { apiFetch } from "./api";
 
 export type LogStatus = "TAKEN" | "MISSED" | "PENDING";
-export type LogAiStatus =
+export type PillCountStatus =
   | "COUNT_MATCH"
   | "COUNT_MISMATCH"
   | "COUNT_UNKNOWN"
@@ -16,7 +16,7 @@ export interface MedicationLog {
   takenAt: string | null;
   status: LogStatus;
   photoUrl: string | null;
-  aiStatus: LogAiStatus;
+  pillCountStatus: PillCountStatus;
   isProxy: boolean;
   confirmedByUserId: number;
   createdAt: string;

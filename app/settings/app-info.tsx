@@ -2,6 +2,7 @@ import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
+import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -22,6 +23,7 @@ const ROWS: InfoRow[] = [
 ];
 
 export default function AppInfoScreen() {
+  const router = useRouter();
   return (
     <SafeAreaView
       style={styles.safe}
@@ -39,6 +41,7 @@ export default function AppInfoScreen() {
               key={row.key}
               row={row}
               showDivider={idx < ROWS.length - 1}
+              onPress={row.href ? () => router.push(row.href as any) : undefined}
             />
           ))}
         </View>
@@ -47,11 +50,20 @@ export default function AppInfoScreen() {
   );
 }
 
-function Row({ row, showDivider }: { row: InfoRow; showDivider: boolean }) {
+function Row({
+  row,
+  showDivider,
+  onPress,
+}: {
+  row: InfoRow;
+  showDivider: boolean;
+  onPress?: () => void;
+}) {
   const isStatic = row.value !== undefined;
 
   return (
     <Pressable
+      onPress={onPress}
       disabled={isStatic}
       style={({ pressed }) => [
         styles.row,

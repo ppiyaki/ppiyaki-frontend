@@ -20,7 +20,7 @@ import {
 } from "@/services/user-settings";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -79,6 +79,8 @@ export default function PrescriptionReviewScreen() {
   const [amountMap, setAmountMap] = useState<AmountMap>({});
   /** candidate별 dosage 입력값 (OCR 누락분 보강용) */
   const [dosageMap, setDosageMap] = useState<Record<number, string>>({});
+  /** 이미 자동 ACCEPT 처리한 candidate id — 중복 호출 방지 */
+  const autoAcceptedRef = useRef<Set<number>>(new Set());
 
   const load = useCallback(async () => {
     if (!prescriptionId) return;
@@ -139,6 +141,51 @@ export default function PrescriptionReviewScreen() {
     });
   }, [detail]);
 
+  // EXACT 매칭 + dosage 추출 성공한 후보는 보호자 검토 없이 자동 ACCEPT 처리
+  useEffect(() => {
+    if (!detail || !prescriptionId) return;
+    const targets = detail.candidates.filter(
+      (c) =>
+        c.caregiverDecision === "PENDING" &&
+        c.matchType === "EXACT" &&
+        !!c.extractedDosage?.trim() &&
+        !autoAcceptedRef.current.has(c.id),
+    );
+    if (targets.length === 0) return;
+    for (const c of targets) autoAcceptedRef.current.add(c.id);
+    void (async () => {
+      for (const c of targets) {
+        const confirmedMealSlots = (c.suggestedMealSlots ?? []).slice();
+        try {
+          await decideCandidate(prescriptionId, c.id, "ACCEPTED", {
+            confirmedMealSlots,
+            dosage: c.extractedDosage,
+          });
+          setDetail((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  candidates: prev.candidates.map((x) =>
+                    x.id === c.id
+                      ? {
+                          ...x,
+                          caregiverDecision: "ACCEPTED",
+                          confirmedMealSlots,
+                        }
+                      : x,
+                  ),
+                }
+              : prev,
+          );
+        } catch (e) {
+          // 자동 처리 실패 시 사용자가 직접 결정하도록 락만 풀어줌
+          console.log("[prescription] auto-accept failed:", c.id, e);
+          autoAcceptedRef.current.delete(c.id);
+        }
+      }
+    })();
+  }, [detail, prescriptionId]);
+
   const updateDosage = (candidateId: number, value: string) => {
     setDosageMap((prev) => ({ ...prev, [candidateId]: value }));
   };
@@ -188,9 +235,9 @@ export default function PrescriptionReviewScreen() {
     }
     if (e instanceof ApiError && e.code === "USER_002") {
       await confirm({
-        title: "식사 시간이 필요해요",
+        title: "복약 시간이 필요해요",
         message:
-          "선택한 식사 시간(아침/점심/저녁)이 시니어 프로필에 설정되어 있지 않아요.\n프로필에서 식사 시간을 먼저 설정해주세요.",
+          "선택한 복약 시간(아침/점심/저녁)이 시니어 프로필에 설정되어 있지 않아요.\n복약 시간은 시니어가 처음으로 로그인할때 자동으로 설정돼요",
         confirmText: "확인",
         cancelText: "닫기",
       });
@@ -253,9 +300,7 @@ export default function PrescriptionReviewScreen() {
                       ...(chosenItemSeq
                         ? { caregiverChosenItemSeq: chosenItemSeq }
                         : {}),
-                      ...(confirmedMealSlots
-                        ? { confirmedMealSlots }
-                        : {}),
+                      ...(confirmedMealSlots ? { confirmedMealSlots } : {}),
                       ...(dosage ? { extractedDosage: dosage } : {}),
                     }
                   : c,
@@ -442,7 +487,10 @@ export default function PrescriptionReviewScreen() {
               style={styles.prescriptionImage}
               resizeMode="contain"
               onLoadStart={() =>
-                console.log("[prescription] image load start:", detail.maskedImageUrl)
+                console.log(
+                  "[prescription] image load start:",
+                  detail.maskedImageUrl,
+                )
               }
               onLoad={() => console.log("[prescription] image loaded OK")}
               onError={(e) =>
@@ -600,7 +648,10 @@ function CandidateCard({
               allowFontScaling={false}
               style={[
                 styles.dosageInput,
-                decided !== "PENDING" && { backgroundColor: "#F4F2EA", color: "#888" },
+                decided !== "PENDING" && {
+                  backgroundColor: "#F4F2EA",
+                  color: "#888",
+                },
                 !candidate.extractedDosage &&
                   !dosage.trim() && { borderColor: "#E14B4B" },
               ]}
