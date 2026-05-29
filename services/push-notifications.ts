@@ -1,3 +1,4 @@
+import messaging from "@react-native-firebase/messaging";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
@@ -30,17 +31,21 @@ function detectPlatform(): DevicePlatform {
 }
 
 /**
- * 권한 요청 → 디바이스 토큰 발급 → 백엔드 등록.
+ * 권한 요청 → FCM 토큰 발급 → 백엔드 등록.
  * 인증되지 않았거나 권한 거절 시 조용히 종료. 실패해도 throw 하지 않음.
  *
- * 안드로이드는 google-services.json이 있어야 FCM 토큰 발급됨.
- * iOS는 APNS 토큰. 백엔드가 FCM/APNS 둘 다 받도록 구성되어 있어야 한다.
+ * Android: google-services.json 통해 Firebase 가 자동 초기화 → FCM 토큰 발급.
+ * iOS: GoogleService-Info.plist + APNs 키 (Firebase Console) 통해 Firebase iOS bridge
+ *      가 APNs 토큰을 받아 FCM 토큰으로 변환. messaging().getToken() 으로 양쪽 모두
+ *      동일한 FCM 토큰 형식 획득.
  */
 export async function setupPushAndRegister(): Promise<void> {
   try {
     const accessToken = await getAccessToken();
     if (!accessToken) return;
 
+    // 권한 요청 — expo-notifications 와 firebase messaging 양쪽 다 같은 OS 권한을
+    // 본다. 일관성 위해 expo-notifications API 로 처리.
     const { status: existing } = await Notifications.getPermissionsAsync();
     let finalStatus = existing;
     if (existing !== "granted") {
@@ -52,9 +57,24 @@ export async function setupPushAndRegister(): Promise<void> {
       return;
     }
 
-    const tokenRes = await Notifications.getDevicePushTokenAsync();
-    const token = tokenRes.data;
-    if (typeof token !== "string" || token.length === 0) return;
+    // iOS는 APNs 토큰 등록이 선행돼야 FCM 토큰 발급 가능
+    if (Platform.OS === "ios") {
+      await messaging().registerDeviceForRemoteMessages();
+    }
+
+    const token = await messaging().getToken();
+    if (typeof token !== "string" || token.length === 0) {
+      console.log("[push] empty FCM token");
+      return;
+    }
+
+    if (__DEV__) {
+      console.log(
+        "[push] FCM token acquired:",
+        Platform.OS,
+        token.slice(0, 16) + "...",
+      );
+    }
 
     const result = await registerDeviceToken(token, detectPlatform());
     await SecureStore.setItemAsync(TOKEN_ID_KEY, String(result.tokenId));

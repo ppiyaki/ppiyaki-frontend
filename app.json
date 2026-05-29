@@ -10,7 +10,28 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ppiyaki.app"
+      "bundleIdentifier": "com.ppiyaki.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "kakao08003eefd67c25489b651fb5927c04ca"
+            ]
+          }
+        ],
+        "LSApplicationQueriesSchemes": [
+          "kakao08003eefd67c25489b651fb5927c04ca",
+          "kakaokompassauth",
+          "kakaolink",
+          "kakaotalk-5.9.7",
+          "kakaoplus"
+        ],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.ppiyaki.app",
@@ -75,9 +96,14 @@
         {
           "android": {
             "kotlinVersion": "2.1.20"
+          },
+          "ios": {
+            "useFrameworks": "static"
           }
         }
-      ]
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
     ],
     "experiments": {
       "typedRoutes": true,
