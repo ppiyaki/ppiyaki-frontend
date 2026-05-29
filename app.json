@@ -114,7 +114,8 @@
         }
       ],
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      "./plugins/with-modular-headers.js"
     ],
     "experiments": {
       "typedRoutes": true,

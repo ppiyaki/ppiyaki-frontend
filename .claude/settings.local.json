@@ -9,7 +9,9 @@
       "PowerShell(npx tsc --noEmit 2>&1)",
       "Bash(npx eas-cli *)",
       "Bash(xargs grep -l \"kotlin\")",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./app.json'\\), null, 2\\)\\)\")",
+      "Bash(echo \"JSON valid: $?\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\cjy03\\Ppiyaki\\services"
