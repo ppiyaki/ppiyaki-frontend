@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "ppiyaki",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ppiyaki.app",
@@ -98,7 +98,17 @@
             "kotlinVersion": "2.1.20"
           },
           "ios": {
-            "useFrameworks": "static"
+            "useFrameworks": "static",
+            "extraPods": [
+              {
+                "name": "FirebaseFirestoreInternal",
+                "modular_headers": true
+              },
+              {
+                "name": "GoogleUtilities",
+                "modular_headers": true
+              }
+            ]
           }
         }
       ],
