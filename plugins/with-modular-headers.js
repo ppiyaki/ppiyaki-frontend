@@ -1,28 +1,29 @@
 // Expo config plugin — react-native-firebase v24 + Expo SDK 54 + New Arch + useFrameworks:static
 // 조합에서 발생하는 non-modular header include 빌드 에러 회피용.
 //
-// 두 가지 변경을 Podfile 에 주입한다:
+// Podfile 에 두 가지 변경 주입:
 //   1) use_modular_headers!  — 가능한 한 modular header 로 통일
-//   2) post_install hook — 모든 pod target 의 CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE
-//      을 'NO' 로 강제. (1)이 안 먹는 RNFBApp/React-Core 헤더 import 까지 경고만 띄우고
-//      에러로 안 만드는 brute-force fallback.
+//   2) 기존 post_install 블록 안에 build_settings 패치 삽입 — 모든 pod target 의
+//      CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE 을 'NO' 로 강제.
+//      CocoaPods 는 post_install 블록 1개만 허용하므로 새로 추가하지 말고
+//      기존 블록 시작 직후에 우리 코드를 끼워넣어야 함.
 
 const { withDangerousMod } = require("@expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
 const MODULAR_MARKER = "use_modular_headers!";
-const POSTINSTALL_MARKER = "# === non-modular-include warning suppression ===";
+const INJECT_MARKER = "# === modular-include warning suppression injected ===";
 
-const POST_INSTALL_SNIPPET = `
-${POSTINSTALL_MARKER}
-post_install do |installer|
+// 기존 post_install 블록 시작 직후에 끼울 코드.
+// `installer` 변수는 기존 블록 시그니처에서 이미 정의돼 있으므로 그대로 사용.
+const INJECT_SNIPPET = `  ${INJECT_MARKER}
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
     end
   end
-end
+  # === end injection ===
 `;
 
 function patchPodfile(contents) {
@@ -38,9 +39,21 @@ function patchPodfile(contents) {
     }
   }
 
-  // 2) post_install hook 추가 (파일 끝)
-  if (!next.includes(POSTINSTALL_MARKER)) {
-    next = next.trimEnd() + "\n" + POST_INSTALL_SNIPPET;
+  // 2) 기존 post_install 블록 시작 직후에 build_settings 패치 삽입
+  if (!next.includes(INJECT_MARKER)) {
+    // 매칭: `post_install do |installer|` 다음 줄에 우리 코드 삽입
+    const postInstallRe = /(post_install\s+do\s+\|\s*[^|]+\|\s*\n)/;
+    if (postInstallRe.test(next)) {
+      next = next.replace(postInstallRe, `$1${INJECT_SNIPPET}`);
+    } else {
+      // 폴백 — 기존 post_install 이 없으면 파일 끝에 새로 추가
+      next =
+        next.trimEnd() +
+        "\n\n" +
+        "post_install do |installer|\n" +
+        INJECT_SNIPPET +
+        "end\n";
+    }
   }
 
   return next;
@@ -66,7 +79,7 @@ module.exports = function withModularHeaders(config) {
       if (patched !== original) {
         fs.writeFileSync(podfilePath, patched, "utf8");
         console.log(
-          "[with-modular-headers] Podfile patched: use_modular_headers! + post_install hook",
+          "[with-modular-headers] Podfile patched: use_modular_headers! + injected build_settings into existing post_install",
         );
       } else {
         console.log("[with-modular-headers] Podfile already patched, skipping");
