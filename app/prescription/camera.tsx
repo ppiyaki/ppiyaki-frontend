@@ -143,6 +143,9 @@ export default function PrescriptionCameraScreen() {
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing="back"
+          // 셔터음 무음화 시도. iOS 한국 모델은 OS 레벨에서 강제라 효과 없을 수 있음
+          // (개인정보 보호법 관련 규제), 안드로이드는 대부분 무음 가능.
+          mute={true}
         />
 
         {error && (

@@ -1,8 +1,11 @@
-import { listNotifications } from "@/services/notifications";
+import {
+  NOTIFICATION_UPDATED_EVENT,
+  listNotifications,
+} from "@/services/notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { DeviceEventEmitter, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const POLL_INTERVAL_MS = 30_000;
@@ -25,9 +28,14 @@ export default function FamilyTabLayout() {
     };
     void check();
     const timer = setInterval(check, POLL_INTERVAL_MS);
+    // 알림 화면에서 읽음 처리 직후 즉시 뱃지 갱신
+    const sub = DeviceEventEmitter.addListener(NOTIFICATION_UPDATED_EVENT, () => {
+      void check();
+    });
     return () => {
       cancelled = true;
       clearInterval(timer);
+      sub.remove();
     };
   }, []);
 

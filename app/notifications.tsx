@@ -303,8 +303,12 @@ function NotifCard({
   const meta = CATEGORY_META[item.category];
   // 복약 인증 미완료 (takenAt null) 인 MEDICATION_REMINDER 만 "확인" 버튼 노출.
   // 인증 완료 시 백엔드가 takenAt 채워주고, 그 시점부터 버튼 사라짐.
+  // 추가로 — 시간 지난 알림(오늘이 아닌 것)은 인증 불가. 어제·그 이전 알림에서 인증해도
+  // 그 시점의 복약 상황이 아니라 의미가 없어서 button 숨김.
   const showConfirm =
-    item.category === "MEDICATION_REMINDER" && item.takenAt == null;
+    item.category === "MEDICATION_REMINDER" &&
+    item.takenAt == null &&
+    isToday(item.createdAt);
 
   return (
     <Pressable
@@ -488,6 +492,17 @@ function formatTime(iso: string): string {
   const ampm = h < 12 ? "오전" : "오후";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${ampm} ${h12}:${m}`;
+}
+
+/** ISO 문자열의 날짜가 로컬 타임존 기준 오늘인지 여부 */
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
 }
 
 const styles = StyleSheet.create({

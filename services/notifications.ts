@@ -1,4 +1,15 @@
+import { DeviceEventEmitter } from "react-native";
 import { apiFetch } from "./api";
+
+/**
+ * 알림 읽음 상태가 갱신됐을 때 발행되는 이벤트.
+ * 탭 바 뱃지 (보호자 _layout, 시니어 home) 가 이걸 구독해서 즉시 refetch.
+ */
+export const NOTIFICATION_UPDATED_EVENT = "notifications:updated";
+
+export function emitNotificationsUpdated() {
+  DeviceEventEmitter.emit(NOTIFICATION_UPDATED_EVENT);
+}
 
 export type NotificationCategory =
   | "MEDICATION_REMINDER"
@@ -74,6 +85,7 @@ export async function markNotificationRead(id: number): Promise<void> {
   await apiFetch<void>(`/api/v1/notifications/${id}/read`, {
     method: "PATCH",
   });
+  emitNotificationsUpdated();
 }
 
 /** 본인의 미읽음 알림 일괄 읽음 처리 */
@@ -81,4 +93,5 @@ export async function markAllNotificationsRead(): Promise<void> {
   await apiFetch<void>("/api/v1/notifications/read-all", {
     method: "POST",
   });
+  emitNotificationsUpdated();
 }
