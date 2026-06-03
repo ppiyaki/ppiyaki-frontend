@@ -202,10 +202,15 @@ export default function FamilyNotificationsScreen() {
 
   const handleNotifPress = (item: NotificationItem) => {
     if (!item.isRead) void markRead(item.id);
-    if (
-      item.category === "DUR_WARNING" ||
-      item.category === "MEDICATION_DELAY"
-    ) {
+    if (item.category === "MEDICATION_DELAY") {
+      // 복약 지연 알림 → 해당 날짜의 보호자 대시보드(record)로 이동.
+      // payload 에 targetDate 가 있으면 그 날짜로 진입, 없으면 오늘.
+      const td = parseTargetDate(item.payload);
+      router.push({
+        pathname: "/family/record" as any,
+        params: td ? { date: td } : {},
+      });
+    } else if (item.category === "DUR_WARNING") {
       router.push("/family/prescriptions" as any);
     } else if (item.category === "PRESCRIPTION_REVIEW_REQUEST") {
       const pId = parseFamilyPrescriptionId(item.payload);
@@ -396,6 +401,22 @@ function NotifCard({
       </View>
     </Pressable>
   );
+}
+
+/**
+ * 알림 payload(JSON 문자열) 에서 targetDate (YYYY-MM-DD) 추출.
+ * MEDICATION_DELAY 등에서 사용. 형식 안 맞으면 null.
+ */
+function parseTargetDate(payload: string | null): string | null {
+  if (!payload) return null;
+  try {
+    const obj = JSON.parse(payload) as Record<string, unknown>;
+    const td = obj.targetDate;
+    if (typeof td !== "string") return null;
+    return /^\d{4}-\d{2}-\d{2}$/.test(td) ? td : null;
+  } catch {
+    return null;
+  }
 }
 
 /** PRESCRIPTION_REVIEW_REQUEST payload에서 prescriptionId 추출. */

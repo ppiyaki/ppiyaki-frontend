@@ -21,7 +21,7 @@ import {
   MealTimes,
 } from "@/services/user-settings";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { ComponentProps, useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -129,11 +129,24 @@ const SLOT_ICON: Record<MealSlot, IoniconName> = {
 /* ────────────────────── 메인 ────────────────────── */
 
 export default function FamilyRecordScreen() {
-  const [period, setPeriod] = useState<Period>("day");
+  // 알림 탭에서 특정 날짜로 진입할 수 있도록 URL 파라미터 지원.
+  // 예: /family/record?date=2026-05-30 → 그 날짜의 일간 기록 표시
+  const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
+  const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const focusedDate =
+    dateParam && isoDateRe.test(dateParam) ? dateParam : null;
+
+  // 날짜 파라미터가 있으면 일간 탭을 자동으로 선택
+  const [period, setPeriod] = useState<Period>(focusedDate ? "day" : "day");
   const [seniorId, setSeniorId] = useState<number | null>(null);
   const [seniorName, setSeniorName] = useState<string>("어르신");
   const [caregiverName, setCaregiverName] = useState<string>("");
   const [daysLeft, setDaysLeft] = useState<number>(0);
+
+  // dateParam이 바뀌면 day 탭으로 강제 전환 (다른 탭에 있던 상태로 알림 탭하면)
+  useEffect(() => {
+    if (focusedDate) setPeriod("day");
+  }, [focusedDate]);
 
   // 시니어 ID 부트스트랩
   useEffect(() => {
@@ -188,7 +201,7 @@ export default function FamilyRecordScreen() {
               <ActivityIndicator size="large" color="#FFD24D" />
             </View>
           ) : period === "day" ? (
-            <DailyView seniorId={seniorId} />
+            <DailyView seniorId={seniorId} date={focusedDate} />
           ) : period === "week" ? (
             <WeeklyView seniorId={seniorId} />
           ) : (
@@ -239,7 +252,14 @@ function PeriodToggle({
 
 /* ────────────────────── 일간 ────────────────────── */
 
-function DailyView({ seniorId }: { seniorId: number }) {
+function DailyView({
+  seniorId,
+  date,
+}: {
+  seniorId: number;
+  // 특정 날짜 조회 — null/undefined 면 오늘
+  date?: string | null;
+}) {
   const [data, setData] = useState<DailyDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -247,16 +267,16 @@ function DailyView({ seniorId }: { seniorId: number }) {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      const today = toIsoDate(new Date());
+      const targetDate = date ?? toIsoDate(new Date());
       setLoading(true);
       setError(null);
       void (async () => {
         try {
-          const res = await getDashboardDaily(seniorId, today);
+          const res = await getDashboardDaily(seniorId, targetDate);
           if (__DEV__) {
             console.log("[record/daily] response:", {
               seniorId,
-              today,
+              targetDate,
               dayStatus: res.dayStatus,
               slots: res.slots.map((sl) => ({
                 slot: sl.slot,
@@ -283,7 +303,7 @@ function DailyView({ seniorId }: { seniorId: number }) {
       return () => {
         cancelled = true;
       };
-    }, [seniorId]),
+    }, [seniorId, date]),
   );
 
   if (loading) {

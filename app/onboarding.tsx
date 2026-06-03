@@ -1,6 +1,9 @@
 import AppText from "@/components/app-text";
 import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+const ONBOARDING_SEEN_KEY = "onboarding_seen";
 import {
     Animated,
     Easing,
@@ -197,7 +200,15 @@ export default function OnboardingScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="계속하기"
-            onPress={() => router.push("/select-role")}
+            onPress={() => {
+              // 한 번이라도 인트로를 본 사용자는 다음 실행부터 이 화면 생략
+              void SecureStore.setItemAsync(ONBOARDING_SEEN_KEY, "1").catch(
+                () => {
+                  // 저장 실패해도 진행은 계속
+                },
+              );
+              router.push("/select-role");
+            }}
             disabled={!buttonEnabled}
             style={({ pressed }) => [
               styles.ctaButton,

@@ -26,6 +26,12 @@ export interface MeResponse {
   id: number;
   nickname: string;
   role: UserRole | null;
+  /** 시니어 본인 또는 보호자가 설정한 성별. 미설정 시 null */
+  gender?: SeniorGender | null;
+  /** 기본 프로필 사진 인덱스 (1~6). 커스텀 업로드 시 null */
+  profileImage?: ProfileImageIndex | null;
+  /** 커스텀 업로드 사진 presigned GET URL (30분 유효). 미사용 시 null */
+  profileImageUrl?: string | null;
   isOnboarded: boolean;
   mealTimes?: ServerMealTimes | null;
   /** 시니어인 경우에만 채워짐. 보호자가 관리/자율 모드를 설정. */
@@ -139,7 +145,10 @@ export async function signupLocal(
 
 /* ────────── 보호자 온보딩 ────────── */
 
-export type SeniorGender = "MALE" | "FEMALE" | "UNKNOWN";
+export type SeniorGender = "MALE" | "FEMALE" | "OTHER" | "UNKNOWN";
+
+/** 기본 프로필 사진 인덱스 (1~6). 커스텀 업로드와 상호 배타. */
+export type ProfileImageIndex = 1 | 2 | 3 | 4 | 5 | 6;
 export type CareMode = "AUTONOMOUS" | "MANAGED";
 
 export interface OnboardingSeniorInput {

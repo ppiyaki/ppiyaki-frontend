@@ -1,12 +1,11 @@
 import AppText from "@/components/app-text";
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
-    Image,
-    Pressable,
-    StyleSheet,
-    useWindowDimensions,
-    View,
+  Image,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -58,21 +57,6 @@ export default function SelectRoleScreen() {
           />
         </View>
       </View>
-
-      {__DEV__ && (
-        <Pressable
-          onPress={() => router.push("/dev-login" as any)}
-          style={({ pressed }) => [
-            styles.devBtn,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <Ionicons name="bug" size={14} color="#888" />
-          <AppText type="pretendard-b" style={styles.devBtnText}>
-            DEV 로그인
-          </AppText>
-        </Pressable>
-      )}
     </SafeAreaView>
   );
 }

@@ -3,14 +3,22 @@ import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
-import { getMe, logoutKakao } from "@/services/auth";
+import { getMe, logoutKakao, MeResponse } from "@/services/auth";
 import { PetMe, getMyPet } from "@/services/pets";
+import { resolveProfileImage } from "@/utils/profile-image";
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import * as Linking from "expo-linking";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Image,
+  ImageSourcePropType,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const FEEDBACK_URL =
@@ -44,15 +52,22 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const confirm = useConfirm();
   useRequireAuth();
-  const [nickname, setNickname] = useState<string>("");
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [pet, setPet] = useState<PetMe | null>(null);
+  const nickname = me?.nickname ?? "";
+  const avatarSource: ImageSourcePropType = resolveProfileImage({
+    profileImage: me?.profileImage ?? null,
+    profileImageUrl: me?.profileImageUrl ?? null,
+  });
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       void (async () => {
-        const [me, petRes] = await Promise.all([
-          getMe().catch(() => null),
+        // 화면 진입할 때마다 fresh fetch — edit-profile 에서 수정 후 돌아왔을 때
+        // 새 닉네임/사진 즉시 반영.
+        const [meRes, petRes] = await Promise.all([
+          getMe(true).catch(() => null),
           getMyPet().catch((e) => {
             if (e instanceof ApiError && e.status === 404) return null;
             console.log("[profile] pet fetch failed:", e);
@@ -60,7 +75,7 @@ export default function ProfileScreen() {
           }),
         ]);
         if (cancelled) return;
-        if (me) setNickname(me.nickname);
+        if (meRes) setMe(meRes);
         if (petRes) setPet(petRes);
       })();
       return () => {
@@ -148,7 +163,7 @@ export default function ProfileScreen() {
           <View style={styles.cardTop}>
             <View style={styles.avatarRing}>
               <Image
-                source={require("../assets/images/pf/pfimg4.png")}
+                source={avatarSource}
                 style={styles.avatar}
                 resizeMode="cover"
               />

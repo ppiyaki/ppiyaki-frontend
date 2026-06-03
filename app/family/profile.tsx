@@ -2,7 +2,8 @@ import AppText from "@/components/app-text";
 import { useConfirm } from "@/contexts/confirm-context";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
-import { getMe, logoutKakao } from "@/services/auth";
+import { getMe, logoutKakao, MeResponse } from "@/services/auth";
+import { resolveProfileImage } from "@/utils/profile-image";
 import { InviteCodeResponse, issueInviteCode } from "@/services/care-relations";
 import {
   LinkedSenior,
@@ -10,6 +11,8 @@ import {
   unlinkSenior,
 } from "@/services/caregivers";
 import { createSenior } from "@/services/seniors";
+import { updateSeniorProfile } from "@/services/users";
+import type { SeniorGender } from "@/services/auth";
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
@@ -41,23 +44,29 @@ export default function FamilyProfileScreen() {
   const confirm = useConfirm();
   useRequireAuth();
 
-  const [nickname, setNickname] = useState<string>("");
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [seniors, setSeniors] = useState<LinkedSenior[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteSenior, setInviteSenior] = useState<LinkedSenior | null>(null);
+  const [editingSenior, setEditingSenior] = useState<LinkedSenior | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const nickname = me?.nickname ?? "";
+  const myAvatarSource = resolveProfileImage({
+    profileImage: me?.profileImage ?? null,
+    profileImageUrl: me?.profileImageUrl ?? null,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [me, list] = await Promise.all([
-        getMe().catch(() => null),
+      const [meRes, list] = await Promise.all([
+        getMe(true).catch(() => null),
         listLinkedSeniors().catch((e) => {
           console.log("[family-profile] listLinkedSeniors failed:", e);
           return [] as LinkedSenior[];
         }),
       ]);
-      if (me) setNickname(me.nickname);
+      if (meRes) setMe(meRes);
       setSeniors(list);
     } finally {
       setLoading(false);
@@ -136,7 +145,7 @@ export default function FamilyProfileScreen() {
         <View style={styles.userCard}>
           <View style={styles.avatarRing}>
             <Image
-              source={require("../../assets/images/pf/pfimg1.png")}
+              source={myAvatarSource}
               style={styles.avatar}
               resizeMode="cover"
             />
@@ -244,7 +253,22 @@ export default function FamilyProfileScreen() {
         </View>
       </ScrollView>
 
-      <InviteCodeModal senior={inviteSenior} onClose={closeInviteModal} />
+      <InviteCodeModal
+        senior={inviteSenior}
+        onClose={closeInviteModal}
+        onOpenEdit={(senior) => {
+          setInviteSenior(null);
+          setEditingSenior(senior);
+        }}
+      />
+      <EditSeniorProfileModal
+        senior={editingSenior}
+        onClose={() => setEditingSenior(null)}
+        onSaved={async () => {
+          setEditingSenior(null);
+          await load();
+        }}
+      />
       <AddSeniorModal
         visible={addOpen}
         onClose={() => setAddOpen(false)}
@@ -495,9 +519,11 @@ function getRemainingCooldownSec(seniorId: number): number {
 function InviteCodeModal({
   senior,
   onClose,
+  onOpenEdit,
 }: {
   senior: LinkedSenior | null;
   onClose: () => void;
+  onOpenEdit: (senior: LinkedSenior) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<InviteCodeResponse | null>(null);
@@ -690,6 +716,25 @@ function InviteCodeModal({
               </AppText>
             </Pressable>
           </View>
+
+          {/* 프로필 수정 (닉네임/성별) 진입 — 코드 영역과 분리해서 하단에 별도 배치 */}
+          {senior && (
+            <Pressable
+              onPress={() => onOpenEdit(senior)}
+              style={({ pressed }) => [
+                styles.editProfileBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Ionicons name="create-outline" size={16} color="#5BC4AE" />
+              <AppText
+                type="pretendard-b"
+                style={styles.editProfileBtnText}
+              >
+                {senior.nickname}님 정보 수정
+              </AppText>
+            </Pressable>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -1111,4 +1156,226 @@ const styles = StyleSheet.create({
   modalCopyTextDone: {
     color: "#5BC4AE",
   },
+
+  /* ── 프로필 수정 진입 버튼 (코드 영역 아래 분리 배치) ── */
+  editProfileBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#BDEFEA",
+    backgroundColor: "#FFF",
+    marginTop: 4,
+  },
+  editProfileBtnText: {
+    fontSize: 14,
+    color: "#5BC4AE",
+  },
+});
+
+/* ────────── EditSeniorProfileModal — 보호자가 시니어 nickname/gender 수정 ────────── */
+
+type EditGenderLabel = "남" | "여" | "비공개";
+const EDIT_GENDERS: EditGenderLabel[] = ["남", "여", "비공개"];
+const EDIT_LABEL_TO_API: Record<EditGenderLabel, SeniorGender> = {
+  남: "MALE",
+  여: "FEMALE",
+  비공개: "UNKNOWN",
+};
+const EDIT_API_TO_LABEL: Record<SeniorGender, EditGenderLabel> = {
+  MALE: "남",
+  FEMALE: "여",
+  OTHER: "비공개",
+  UNKNOWN: "비공개",
+};
+
+function EditSeniorProfileModal({
+  senior,
+  onClose,
+  onSaved,
+}: {
+  senior: LinkedSenior | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const confirm = useConfirm();
+  const [nickname, setNickname] = useState("");
+  const [gender, setGender] = useState<EditGenderLabel>("비공개");
+  const [submitting, setSubmitting] = useState(false);
+
+  // 모달 열릴 때마다 senior 기준으로 폼 초기화
+  useEffect(() => {
+    if (senior) {
+      setNickname(senior.nickname);
+      // LinkedSenior 에 gender 가 있다면 매핑, 없으면 비공개
+      const g = (senior as LinkedSenior & { gender?: SeniorGender }).gender;
+      setGender(g ? EDIT_API_TO_LABEL[g] : "비공개");
+      setSubmitting(false);
+    }
+  }, [senior]);
+
+  const trimmed = nickname.trim();
+  const canSubmit = trimmed.length > 0 && !submitting && senior != null;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !senior) return;
+    setSubmitting(true);
+    try {
+      await updateSeniorProfile(senior.id, {
+        nickname: trimmed,
+        gender: EDIT_LABEL_TO_API[gender],
+      });
+      onSaved();
+    } catch (e) {
+      const msg =
+        e instanceof ApiError ? e.toUserMessage() : "수정에 실패했어요";
+      await confirm({
+        title: "수정 실패",
+        message: msg,
+        confirmText: "확인",
+        cancelText: "닫기",
+      });
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={senior !== null}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={() => {}}>
+          <View style={styles.modalHead}>
+            <AppText type="pretendard-b" style={styles.modalTitle}>
+              시니어 정보 수정
+            </AppText>
+            <Pressable onPress={onClose} hitSlop={10} style={styles.modalClose}>
+              <Ionicons name="close" size={20} color="#666" />
+            </Pressable>
+          </View>
+
+          <AppText type="pretendard-m" style={styles.modalDesc}>
+            시니어의 닉네임과 성별을 수정할 수 있어요.
+            {"\n"}
+            프로필 사진은 시니어 본인만 변경할 수 있어요.
+          </AppText>
+
+          <View style={editProfStyles.fieldGroup}>
+            <AppText type="pretendard-b" style={editProfStyles.label}>
+              닉네임
+            </AppText>
+            <TextInput
+              value={nickname}
+              onChangeText={setNickname}
+              placeholder="시니어 닉네임"
+              placeholderTextColor="#BBB"
+              maxLength={10}
+              style={editProfStyles.input}
+            />
+          </View>
+
+          <View style={editProfStyles.fieldGroup}>
+            <AppText type="pretendard-b" style={editProfStyles.label}>
+              성별
+            </AppText>
+            <View style={editProfStyles.genderRow}>
+              {EDIT_GENDERS.map((g) => {
+                const on = gender === g;
+                return (
+                  <Pressable
+                    key={g}
+                    onPress={() => setGender(g)}
+                    style={[
+                      editProfStyles.genderBtn,
+                      on && editProfStyles.genderBtnOn,
+                    ]}
+                  >
+                    <AppText
+                      type="pretendard-b"
+                      style={[
+                        editProfStyles.genderText,
+                        on && editProfStyles.genderTextOn,
+                      ]}
+                    >
+                      {g}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.modalActions}>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.modalCopyBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <AppText type="pretendard-b" style={styles.modalCopyText}>
+                취소
+              </AppText>
+            </Pressable>
+            <Pressable
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              style={({ pressed }) => [
+                styles.modalPrimaryBtn,
+                !canSubmit && styles.modalPrimaryBtnDisabled,
+                pressed && canSubmit && { opacity: 0.85 },
+              ]}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#222" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={16} color="#222" />
+                  <AppText type="pretendard-b" style={styles.modalPrimaryText}>
+                    저장
+                  </AppText>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const editProfStyles = StyleSheet.create({
+  fieldGroup: { gap: 6 },
+  label: { fontSize: 14, color: "#444" },
+  input: {
+    height: 46,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    fontFamily: "Pretendard-Medium",
+    color: "#222",
+    backgroundColor: "#FAFAF6",
+    borderWidth: 1,
+    borderColor: "#E5E0CE",
+    borderRadius: 10,
+  },
+  genderRow: { flexDirection: "row", gap: 8 },
+  genderBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#F1ECDB",
+    backgroundColor: "#FFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  genderBtnOn: { borderColor: "#5BC4AE", backgroundColor: "#E8F7F2" },
+  genderText: { fontSize: 14, color: "#888" },
+  genderTextOn: { color: "#222" },
 });

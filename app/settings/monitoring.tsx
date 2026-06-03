@@ -71,7 +71,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       {
         key: "medicationCompleteEnabled",
         label: "복약 완료 알림",
-        description: "시니어가 복약을 완료하면 알림이 와요",
+        description: "시니어가 모든 복약을 완료하면 알림이 와요",
       },
       {
         key: "durWarningEnabled",
@@ -385,9 +385,7 @@ export default function MonitoringSettingsScreen() {
                 </View>
                 <View style={styles.settingsCard}>
                   {group.title === "복약 알림" && (
-                    <View
-                      style={[styles.settingRow, styles.settingRowDivider]}
-                    >
+                    <View style={[styles.settingRow, styles.settingRowDivider]}>
                       <View style={styles.settingText}>
                         <AppText
                           type="pretendard-b"
@@ -395,10 +393,7 @@ export default function MonitoringSettingsScreen() {
                         >
                           복약 인증 강제
                         </AppText>
-                        <AppText
-                          type="pretendard-m"
-                          style={styles.settingDesc}
-                        >
+                        <AppText type="pretendard-m" style={styles.settingDesc}>
                           켜두면 사진 인증 필수, 끄면 사진 없이도 인증 가능해요
                         </AppText>
                       </View>
