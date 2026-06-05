@@ -121,9 +121,51 @@ export default function ChatScreen() {
 
   const buildAiHandlers = (aiId: string) => {
     let accumulated = "";
+    // TTS 큐 — chunk 가 도착하면 문장 단위로 쪼개 바로바로 Speech.speak 호출.
+    // expo-speech 는 진행 중인 speech 가 있으면 큐에 추가해 순서대로 재생.
+    let unspoken = "";
+    let pendingSpeech = 0; // 큐에 들어가 있는 speech 개수 (0이 되면 speaking 표시 해제)
+    let firstSpeech = true; // 첫 문장에서만 이전 TTS 정지 + speakingId 점등
+
+    const enqueueSpeech = (sentence: string) => {
+      const trimmed = sentence.trim();
+      if (!trimmed) return;
+      if (firstSpeech) {
+        void Speech.stop();
+        setSpeakingId(aiId);
+        firstSpeech = false;
+      }
+      pendingSpeech += 1;
+      const handleEnd = () => {
+        pendingSpeech -= 1;
+        if (pendingSpeech <= 0) {
+          setSpeakingId((cur) => (cur === aiId ? null : cur));
+        }
+      };
+      Speech.speak(trimmed, {
+        language: "ko-KR",
+        rate: 0.95,
+        onDone: handleEnd,
+        onStopped: handleEnd,
+        onError: handleEnd,
+      });
+    };
+
+    // accumulated 에 새 chunk 가 붙을 때마다 문장 끝(. ! ? 。 ！ ？ \n) 단위로 잘라 큐에 추가.
+    const flushSentences = () => {
+      while (true) {
+        const idx = unspoken.search(/[.!?。！？\n]/);
+        if (idx < 0) break;
+        const sentence = unspoken.slice(0, idx + 1);
+        unspoken = unspoken.slice(idx + 1);
+        enqueueSpeech(sentence);
+      }
+    };
+
     return {
       onChunk: (chunk: string) => {
         accumulated += chunk;
+        unspoken += chunk;
         setMessages((prev) =>
           prev.map((m) =>
             m.id === aiId && m.role === "ai"
@@ -131,6 +173,7 @@ export default function ChatScreen() {
               : m,
           ),
         );
+        flushSentences();
       },
       onDone: () => {
         setStreaming(false);
@@ -144,7 +187,11 @@ export default function ChatScreen() {
           );
           return;
         }
-        speakText(aiId, accumulated);
+        // 문장 끝 부호로 닫히지 않은 꼬리 부분도 마지막에 한 번 흘려보냄
+        if (unspoken.trim().length > 0) {
+          enqueueSpeech(unspoken);
+          unspoken = "";
+        }
       },
       onError: (err: Error) => {
         console.log("[chat] stream error:", err);
@@ -292,7 +339,20 @@ export default function ChatScreen() {
       ]);
       setStreaming(true);
 
-      const handlers = buildAiHandlers(aiId);
+      // 음성 메시지는 SSE 첫 이벤트로 STT 결과({"type":"transcription",...})가 도착.
+      // 받으면 사용자 말풍선의 "🎤 음성 메시지" 플레이스홀더를 실제 인식 텍스트로 교체.
+      const handlers = {
+        ...buildAiHandlers(aiId),
+        onTranscription: (transcribed: string) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === userId && m.role === "user"
+                ? { ...m, text: transcribed }
+                : m,
+            ),
+          );
+        },
+      };
       try {
         await streamSessionVoiceMessage(sessionId, uri, handlers);
       } catch (e) {
@@ -486,12 +546,17 @@ export default function ChatScreen() {
                 />
                 <Pressable
                   onPress={handleMicPress}
-                  disabled={!sessionId || streaming}
+                  disabled={!sessionId || streaming || !!pendingImage}
                   style={({ pressed }) => [
                     styles.micBtn,
                     recording && styles.micBtnOn,
-                    (!sessionId || streaming) && { opacity: 0.5 },
-                    pressed && { transform: [{ scale: 0.96 }] },
+                    (!sessionId || streaming || !!pendingImage) && {
+                      opacity: 0.4,
+                    },
+                    pressed &&
+                      !pendingImage && {
+                        transform: [{ scale: 0.96 }],
+                      },
                   ]}
                 >
                   <Ionicons
@@ -518,6 +583,20 @@ export default function ChatScreen() {
                 <AppText type="pretendard-b" style={styles.micLabel}>
                   듣고 있어요…
                 </AppText>
+              ) : pendingImage ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.keypadBtn,
+                    pressed && { backgroundColor: "#FFF4C7" },
+                  ]}
+                  onPress={() => setInputOpen(true)}
+                >
+                  <Ionicons name="keypad" size={20} color="#1F1F1F" />
+                  <AppText type="pretendard-b" style={styles.keypadText}>
+                    키보드로 질문해주세요
+                  </AppText>
+                  <Ionicons name="chevron-forward" size={18} color="#888" />
+                </Pressable>
               ) : (
                 <Pressable
                   style={({ pressed }) => [

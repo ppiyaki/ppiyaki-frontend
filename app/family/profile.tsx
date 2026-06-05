@@ -12,7 +12,7 @@ import {
 } from "@/services/caregivers";
 import { createSenior } from "@/services/seniors";
 import { updateSeniorProfile } from "@/services/users";
-import type { SeniorGender } from "@/services/auth";
+import type { CareMode, SeniorGender } from "@/services/auth";
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
@@ -302,45 +302,32 @@ function AddSeniorModal({
 }) {
   const confirm = useConfirm();
   const [nickname, setNickname] = useState("");
-  const [year, setYear] = useState("");
-  const [month, setMonth] = useState("");
-  const [day, setDay] = useState("");
+  const [gender, setGender] = useState<SeniorGender | null>(null);
+  const [careMode, setCareMode] = useState<CareMode | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // 모달 닫힐 때 폼 리셋
   useEffect(() => {
     if (!visible) {
       setNickname("");
-      setYear("");
-      setMonth("");
-      setDay("");
+      setGender(null);
+      setCareMode(null);
       setSubmitting(false);
     }
   }, [visible]);
 
-  const yearNum = parseInt(year, 10);
-  const monthNum = parseInt(month, 10);
-  const dayNum = parseInt(day, 10);
-  const validDate =
-    !isNaN(yearNum) &&
-    yearNum >= 1900 &&
-    yearNum <= new Date().getFullYear() &&
-    !isNaN(monthNum) &&
-    monthNum >= 1 &&
-    monthNum <= 12 &&
-    !isNaN(dayNum) &&
-    dayNum >= 1 &&
-    dayNum <= 31;
-  const canSubmit = nickname.trim().length > 0 && validDate && !submitting;
+  const canSubmit =
+    nickname.trim().length > 0 && !!gender && !!careMode && !submitting;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
-    const birthDate = `${String(yearNum).padStart(4, "0")}-${String(
-      monthNum,
-    ).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
     setSubmitting(true);
     try {
-      await createSenior({ nickname: nickname.trim(), birthDate });
+      await createSenior({
+        nickname: nickname.trim(),
+        gender: gender!,
+        careMode: careMode!,
+      });
       onCreated();
     } catch (e) {
       const msg =
@@ -397,42 +384,96 @@ function AddSeniorModal({
 
           <View style={addStyles.fieldGroup}>
             <AppText type="pretendard-b" style={addStyles.label}>
-              생년월일
+              성별
             </AppText>
-            <View style={addStyles.dateRow}>
-              <TextInput
-                value={year}
-                onChangeText={(t) =>
-                  setYear(t.replace(/[^0-9]/g, "").slice(0, 4))
-                }
-                keyboardType="number-pad"
-                maxLength={4}
-                placeholder="YYYY"
-                placeholderTextColor="#BBB"
-                style={[addStyles.input, addStyles.dateInputYear]}
-              />
-              <TextInput
-                value={month}
-                onChangeText={(t) =>
-                  setMonth(t.replace(/[^0-9]/g, "").slice(0, 2))
-                }
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="MM"
-                placeholderTextColor="#BBB"
-                style={[addStyles.input, addStyles.dateInputMonthDay]}
-              />
-              <TextInput
-                value={day}
-                onChangeText={(t) =>
-                  setDay(t.replace(/[^0-9]/g, "").slice(0, 2))
-                }
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="DD"
-                placeholderTextColor="#BBB"
-                style={[addStyles.input, addStyles.dateInputMonthDay]}
-              />
+            <View style={addStyles.choiceRow}>
+              {(
+                [
+                  { key: "MALE", label: "남" },
+                  { key: "FEMALE", label: "여" },
+                ] as { key: SeniorGender; label: string }[]
+              ).map((opt) => {
+                const on = gender === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => setGender(opt.key)}
+                    style={[
+                      addStyles.choiceBtn,
+                      on && addStyles.choiceBtnOn,
+                    ]}
+                  >
+                    <AppText
+                      type="pretendard-b"
+                      style={[
+                        addStyles.choiceText,
+                        on && addStyles.choiceTextOn,
+                      ]}
+                    >
+                      {opt.label}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={addStyles.fieldGroup}>
+            <AppText type="pretendard-b" style={addStyles.label}>
+              케어 모드
+            </AppText>
+            <View style={addStyles.modeCol}>
+              {(
+                [
+                  {
+                    key: "AUTONOMOUS",
+                    title: "기본 관리 모드",
+                    desc: "꼭 필요한 알림만",
+                  },
+                  {
+                    key: "MANAGED",
+                    title: "집중 관리 모드",
+                    desc: "실시간 확인과 빠른 경고",
+                  },
+                ] as { key: CareMode; title: string; desc: string }[]
+              ).map((opt) => {
+                const on = careMode === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => setCareMode(opt.key)}
+                    style={[
+                      addStyles.modeBtn,
+                      on && addStyles.modeBtnOn,
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <AppText
+                        type="pretendard-b"
+                        style={[
+                          addStyles.modeTitle,
+                          on && addStyles.modeTitleOn,
+                        ]}
+                      >
+                        {opt.title}
+                      </AppText>
+                      <AppText
+                        type="pretendard-m"
+                        style={addStyles.modeDesc}
+                      >
+                        {opt.desc}
+                      </AppText>
+                    </View>
+                    {on && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={22}
+                        color="#F8B835"
+                      />
+                    )}
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
 
@@ -494,17 +535,60 @@ const addStyles = StyleSheet.create({
     borderColor: "#E5E0CE",
     borderRadius: 10,
   },
-  dateRow: {
+  choiceRow: {
     flexDirection: "row",
     gap: 8,
   },
-  dateInputYear: {
-    flex: 1.4,
-    textAlign: "center",
-  },
-  dateInputMonthDay: {
+  choiceBtn: {
     flex: 1,
-    textAlign: "center",
+    height: 46,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E0CE",
+    backgroundColor: "#FAFAF6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  choiceBtnOn: {
+    borderColor: "#F8B835",
+    backgroundColor: "#FFF4C7",
+  },
+  choiceText: {
+    fontSize: 15,
+    color: "#888",
+  },
+  choiceTextOn: {
+    color: "#171717",
+  },
+  modeCol: {
+    gap: 8,
+  },
+  modeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E0CE",
+    backgroundColor: "#FAFAF6",
+  },
+  modeBtnOn: {
+    borderColor: "#F8B835",
+    backgroundColor: "#FFF9E1",
+  },
+  modeTitle: {
+    fontSize: 15,
+    color: "#444",
+  },
+  modeTitleOn: {
+    color: "#171717",
+  },
+  modeDesc: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#888",
   },
 });
 

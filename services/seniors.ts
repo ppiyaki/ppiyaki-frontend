@@ -1,10 +1,13 @@
 import { apiFetch } from "./api";
+import { CareMode, SeniorGender } from "./auth";
 
 export interface CreateSeniorBody {
   /** 시니어 닉네임 */
   nickname: string;
-  /** 생년월일 yyyy-MM-dd */
-  birthDate: string;
+  /** 성별 — MALE/FEMALE/OTHER 등 */
+  gender: SeniorGender;
+  /** 케어 모드 — AUTONOMOUS(자율) | MANAGED(집중) */
+  careMode: CareMode;
 }
 
 export interface CreateSeniorResponse {

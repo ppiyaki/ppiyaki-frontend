@@ -42,6 +42,11 @@ export async function createChatSession(): Promise<ChatSession> {
 
 interface SseHandlers {
   onChunk: (data: string) => void;
+  /**
+   * 음성 메시지 전용 — LLM 응답 전에 STT 결과(사용자가 말한 텍스트)가 1회 도착.
+   * 백엔드 포맷: `data:{"type":"transcription","text":"..."}`
+   */
+  onTranscription?: (text: string) => void;
   onError?: (error: Error) => void;
   onDone?: () => void;
 }
@@ -66,10 +71,22 @@ function parseSseChunks(text: string, handlers: SseHandlers): boolean {
     }
     if (trimmed === "") continue;
 
-    // JSON 페이로드 (음성 응답) — text 만 뽑고 audio 등 부가 필드는 무시
+    // JSON 페이로드 (음성/사진 응답) — text 만 뽑고 audio 등 부가 필드는 무시
+    // type === "transcription" 이면 사용자 STT 결과 (음성 메시지 1회). 그 외는 AI 응답.
     if (trimmed.startsWith("{")) {
       try {
-        const obj = JSON.parse(trimmed) as { text?: unknown };
+        const obj = JSON.parse(trimmed) as {
+          type?: unknown;
+          text?: unknown;
+        };
+        if (
+          obj.type === "transcription" &&
+          typeof obj.text === "string" &&
+          obj.text.length > 0
+        ) {
+          handlers.onTranscription?.(obj.text);
+          continue;
+        }
         if (typeof obj.text === "string" && obj.text.length > 0) {
           handlers.onChunk(obj.text);
         }
@@ -84,95 +101,139 @@ function parseSseChunks(text: string, handlers: SseHandlers): boolean {
   return done;
 }
 
+/**
+ * SSE 스트리밍 — React Native 환경 대응.
+ *
+ * RN의 fetch 는 `res.body.getReader()` 를 지원하지 않아 전체 응답을 모은 뒤에야
+ * 콜백이 호출됨(=스트리밍 효과 없음). 그래서 XMLHttpRequest 의 onreadystatechange
+ * (readyState === 3 LOADING) 를 활용해 응답이 도착하는 대로 점진적으로 파싱한다.
+ *
+ * 동작:
+ * - xhr.responseText 는 누적이라 마지막으로 읽은 offset 이후만 잘라 buffer 에 붙임
+ * - SSE 이벤트 구분자(`\n\n`) 단위로 끊어 parseSseChunks 호출
+ * - `[DONE]` 만나면 abort + onDone
+ * - HTTP 에러는 readyState === 4 DONE 시점에 본문 같이 묶어 onError
+ */
 async function streamSse(
   path: string,
   init: RequestInit,
   handlers: SseHandlers,
 ): Promise<void> {
   const token = await getAccessToken();
-  const headers: Record<string, string> = {
-    ...(init.headers as Record<string, string> | undefined),
-    Accept: "text/event-stream",
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   if (__DEV__) {
     console.log("[sse] →", path, "method=", init.method ?? "GET");
   }
 
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, { ...init, headers });
-  } catch (e) {
-    if (__DEV__) console.log("[sse] fetch threw:", e);
-    handlers.onError?.(e instanceof Error ? e : new Error("네트워크 오류"));
-    return;
-  }
-  if (__DEV__) {
-    console.log("[sse] ← status", res.status, "ok=", res.ok);
-  }
-  if (!res.ok) {
-    let bodyText = "";
-    try {
-      bodyText = await res.text();
-    } catch {
-      // 무시
-    }
-    if (__DEV__) {
-      console.log(
-        "[sse] error body (first 500):",
-        bodyText.slice(0, 500),
-      );
-    }
-    handlers.onError?.(
-      new Error(
-        `SSE 연결 실패 (${res.status})${
-          bodyText ? ` — ${bodyText.slice(0, 200)}` : ""
-        }`,
-      ),
-    );
-    return;
-  }
+  return new Promise<void>((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(init.method ?? "GET", `${API_BASE}${path}`);
 
-  // 1) ReadableStream 시도 (RN에서는 보통 미지원)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const reader = (res.body as any)?.getReader?.();
-  if (reader) {
-    const decoder = new TextDecoder("utf-8");
+    // 헤더 적용 — init.headers 는 Content-Type 등을 포함할 수 있고,
+    // multipart/form-data 의 경우 Content-Type 을 자동 설정해야 하므로 set 하지 않음.
+    const initHeaders =
+      (init.headers as Record<string, string> | undefined) ?? {};
+    for (const [k, v] of Object.entries(initHeaders)) {
+      try {
+        xhr.setRequestHeader(k, v);
+      } catch {
+        // 일부 헤더는 set 불가 — 무시
+      }
+    }
+    xhr.setRequestHeader("Accept", "text/event-stream");
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    let lastIndex = 0;
     let buffer = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx;
+    let settled = false;
+
+    const settle = (kind: "done" | "error", err?: Error) => {
+      if (settled) return;
+      settled = true;
+      if (kind === "error") {
+        handlers.onError?.(err ?? new Error("네트워크 오류"));
+      } else {
+        handlers.onDone?.();
+      }
+      resolve();
+    };
+
+    const drain = () => {
+      // 도착한 누적 응답에서 새 영역만 잘라 buffer 에 누적
+      const fresh = xhr.responseText.slice(lastIndex);
+      if (!fresh) return false;
+      lastIndex = xhr.responseText.length;
+      buffer += fresh;
+      // SSE 이벤트 단위(`\n\n`)로 파싱
+      let idx: number;
       while ((idx = buffer.indexOf("\n\n")) >= 0) {
         const event = buffer.slice(0, idx);
         buffer = buffer.slice(idx + 2);
         if (parseSseChunks(event, handlers)) {
-          handlers.onDone?.();
-          return;
+          // [DONE] 만남 → 즉시 종료
+          try {
+            xhr.abort();
+          } catch {
+            // noop
+          }
+          settle("done");
+          return true;
         }
       }
-    }
-    handlers.onDone?.();
-    return;
-  }
+      return false;
+    };
 
-  // 2) 폴백: ReadableStream 미지원 → 전체 텍스트 받은 후 일괄 파싱
-  // 스트리밍 효과는 없지만 응답은 정상 수신
-  try {
-    const text = await res.text();
-    if (__DEV__) {
-      console.log(
-        "[chat] SSE raw text (first 500 chars):",
-        text.slice(0, 500),
-      );
+    xhr.onreadystatechange = () => {
+      if (settled) return;
+      // readyState 3: 본문이 도착하는 중 — 진짜 스트리밍 지점
+      if (xhr.readyState === 3) {
+        if (xhr.status >= 400) return; // 에러는 4 에서 처리
+        drain();
+        return;
+      }
+      // readyState 4: 응답 완전 종료
+      if (xhr.readyState === 4) {
+        if (__DEV__) {
+          console.log("[sse] ← status", xhr.status);
+        }
+        if (xhr.status >= 400) {
+          const body = (xhr.responseText ?? "").slice(0, 200);
+          settle(
+            "error",
+            new Error(
+              `SSE 연결 실패 (${xhr.status})${body ? ` — ${body}` : ""}`,
+            ),
+          );
+          return;
+        }
+        // 잔여 데이터 처리
+        const reachedDone = drain();
+        if (reachedDone) return;
+        // [DONE] 없이 끝났을 때 마지막 버퍼도 한 번 더 파싱
+        if (buffer.trim().length > 0) {
+          parseSseChunks(buffer, handlers);
+          buffer = "";
+        }
+        settle("done");
+      }
+    };
+
+    xhr.onerror = () => {
+      if (__DEV__) console.log("[sse] xhr.onerror");
+      settle("error", new Error("네트워크 오류"));
+    };
+    xhr.ontimeout = () => {
+      settle("error", new Error("응답 시간 초과"));
+    };
+
+    try {
+      // init.body 는 string | FormData | Blob 등 — XHR 가 그대로 처리
+      xhr.send((init.body as XMLHttpRequestBodyInit | null) ?? null);
+    } catch (e) {
+      if (__DEV__) console.log("[sse] xhr.send threw:", e);
+      settle("error", e instanceof Error ? e : new Error("요청 전송 실패"));
     }
-    parseSseChunks(text, handlers);
-    handlers.onDone?.();
-  } catch (e) {
-    handlers.onError?.(e instanceof Error ? e : new Error("응답 파싱 실패"));
-  }
+  });
 }
 
 /** 단발 텍스트 대화 (세션 없이) — SSE 스트리밍 */

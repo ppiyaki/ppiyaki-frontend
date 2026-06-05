@@ -3,9 +3,10 @@ import KakaoLoginButton from "@/components/kakao-login-button";
 import { ApiError } from "@/services/api";
 import { loginLocal, loginWithKakao } from "@/services/auth";
 import { resolveAuthRoute, ROUTE_PATHS } from "@/services/post-login";
+import { getAccessToken } from "@/services/token-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,6 +27,35 @@ export default function FamilyLoginScreen() {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [localLoading, setLocalLoading] = useState(false);
+  // 토큰 점검 끝나기 전엔 폼 안 보임 — 깜빡임 방지 + 미완 온보딩 자동 복귀
+  const [checkingToken, setCheckingToken] = useState(true);
+
+  // 진입 시 살아있는 토큰이 있으면 (예: 회원가입 직후 뒤로가기로 복귀) 자동 라우팅.
+  // - isOnboarded=false → 온보딩으로 복귀
+  // - isOnboarded=true  → 메인으로 (재로그인 불필요)
+  // 토큰이 없거나 /me 조회 실패면 정상 로그인 폼 노출.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const token = await getAccessToken();
+      if (!token) {
+        if (!cancelled) setCheckingToken(false);
+        return;
+      }
+      try {
+        const route = await resolveAuthRoute();
+        if (!cancelled) {
+          router.replace(ROUTE_PATHS[route] as any);
+        }
+      } catch {
+        // 토큰이 만료/무효 → 폼 노출
+        if (!cancelled) setCheckingToken(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const routeAfterAuth = async (isOnboarded: boolean) => {
     if (!isOnboarded) {
@@ -72,6 +102,21 @@ export default function FamilyLoginScreen() {
       setLocalLoading(false);
     }
   };
+
+  if (checkingToken) {
+    return (
+      <SafeAreaView
+        style={styles.safe}
+        edges={["top", "left", "right", "bottom"]}
+      >
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
+          <ActivityIndicator color="#FFB800" size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView
