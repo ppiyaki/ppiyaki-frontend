@@ -97,6 +97,12 @@ export default function DoseConfirmIntroScreen() {
       scheduleId?: string;
       targetDate?: string;
     }>();
+  if (__DEV__) {
+    console.log("[dose-confirm/intro] params:", {
+      paramScheduleId,
+      paramTargetDate,
+    });
+  }
   const [resolvedScheduleId, setResolvedScheduleId] = useState<string | null>(
     paramScheduleId ?? null,
   );

@@ -158,6 +158,16 @@ export default function FamilyProfileScreen() {
               {PLACEHOLDER_EMAIL}
             </AppText>
           </View>
+          <Pressable
+            onPress={() => router.push("/settings/edit-profile" as any)}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.editMyBtn,
+              pressed && { opacity: 0.6 },
+            ]}
+          >
+            <Ionicons name="create-outline" size={18} color="#666" />
+          </Pressable>
         </View>
 
         {/* 연동된 시니어 관리 */}
@@ -764,7 +774,11 @@ function SeniorRow({
       <View style={styles.seniorTop}>
         <View style={styles.seniorAvatar}>
           <Image
-            source={SENIOR_AVATAR}
+            source={resolveProfileImage({
+              profileImage: senior.profileImage ?? null,
+              profileImageUrl: senior.profileImageUrl ?? null,
+              fallback: SENIOR_AVATAR,
+            })}
             style={styles.avatar}
             resizeMode="cover"
           />
@@ -1173,6 +1187,16 @@ const styles = StyleSheet.create({
   editProfileBtnText: {
     fontSize: 14,
     color: "#5BC4AE",
+  },
+
+  /* ── 보호자 본인 프로필 카드의 편집 아이콘 (우측 상단) ── */
+  editMyBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F4F2EA",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
 

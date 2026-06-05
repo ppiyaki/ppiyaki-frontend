@@ -416,9 +416,15 @@ function parseReminderPayload(payload: string | null): {
   scheduleId?: number;
   targetDate?: string;
 } {
-  if (!payload) return {};
+  if (!payload) {
+    if (__DEV__) console.log("[reminder] payload is null");
+    return {};
+  }
   try {
     const obj = JSON.parse(payload) as Record<string, unknown>;
+    if (__DEV__) {
+      console.log("[reminder] payload parsed:", obj);
+    }
     const td = obj.targetDate;
 
     // 새 형식: scheduleIds (JSON 배열 문자열 또는 배열)
@@ -443,11 +449,16 @@ function parseReminderPayload(payload: string | null): {
       if (typeof sid === "number") firstId = sid;
     }
 
+    if (__DEV__) {
+      console.log("[reminder] extracted:", { scheduleId: firstId, targetDate: td });
+    }
+
     return {
       scheduleId: firstId,
       targetDate: typeof td === "string" ? td : undefined,
     };
-  } catch {
+  } catch (e) {
+    if (__DEV__) console.log("[reminder] payload parse failed:", e, payload);
     return {};
   }
 }

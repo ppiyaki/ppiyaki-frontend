@@ -7,6 +7,7 @@ import {
   listLinkedCaregivers,
   sendWellbeingPing,
 } from "@/services/care-relations";
+import { resolveProfileImage } from "@/utils/profile-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -217,7 +218,10 @@ export default function MyCaregiversScreen() {
                 <View style={styles.cardTop}>
                   <View style={styles.avatarRing}>
                     <Image
-                      source={require("../assets/images/pf/pfimg1.png")}
+                      source={resolveProfileImage({
+                        profileImage: c.profileImage ?? null,
+                        profileImageUrl: c.profileImageUrl ?? null,
+                      })}
                       style={styles.avatar}
                       resizeMode="cover"
                     />

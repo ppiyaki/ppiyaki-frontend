@@ -14,6 +14,7 @@ import {
 import { listMedicines, Medicine } from "@/services/medicines";
 import { listPrescriptions } from "@/services/prescriptions";
 import { ServerMealSlot } from "@/services/user-settings";
+import { resolveProfileImage } from "@/utils/profile-image";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -248,8 +249,13 @@ export default function FamilyHomeScreen() {
   const streakDays = weekly ? calcStreakFromWeekly(weekly) : 0;
 
   const seniorName = senior?.nickname ?? "어르신";
+  // 백엔드 응답에 senior의 profileImage / profileImageUrl 포함됨. 둘 다 없으면 fallback.
   const seniorImage = senior
-    ? getSeniorImage(senior.id)
+    ? resolveProfileImage({
+        profileImage: senior.profileImage ?? null,
+        profileImageUrl: senior.profileImageUrl ?? null,
+        fallback: getSeniorImage(senior.id),
+      })
     : FALLBACK_SENIOR_IMAGE;
   // 백엔드가 dosage 고려해서 계산한 잔여 일수.
   // 정/캡슐 raw count(`Medicine.remainingAmount`)와 다른 값이라 절대 직접 min 계산 X.
@@ -464,7 +470,11 @@ export default function FamilyHomeScreen() {
                 >
                   <View style={styles.pickerAvatarRing}>
                     <Image
-                      source={getSeniorImage(s.id)}
+                      source={resolveProfileImage({
+                        profileImage: s.profileImage ?? null,
+                        profileImageUrl: s.profileImageUrl ?? null,
+                        fallback: getSeniorImage(s.id),
+                      })}
                       style={styles.pickerAvatar}
                       resizeMode="cover"
                     />

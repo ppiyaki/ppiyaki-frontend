@@ -9,6 +9,7 @@ import {
   MealTimes,
   setSeniorMealTimes,
 } from "@/services/user-settings";
+import { resolveProfileImage } from "@/utils/profile-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -189,7 +190,11 @@ export default function SeniorMealTimesScreen() {
                     >
                       <View style={styles.seniorAvatar}>
                         <Image
-                          source={FALLBACK_IMG}
+                          source={resolveProfileImage({
+                            profileImage: senior.profileImage ?? null,
+                            profileImageUrl: senior.profileImageUrl ?? null,
+                            fallback: FALLBACK_IMG,
+                          })}
                           style={styles.seniorImg}
                           resizeMode="cover"
                         />

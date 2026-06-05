@@ -64,6 +64,8 @@ export default function EditProfileScreen() {
   const [initialServerImageUrl, setInitialServerImageUrl] = useState<
     string | null
   >(null);
+  // 시니어 본인만 성별 수정 가능 — 보호자 클라이언트는 gender 미전송 (백엔드 명세)
+  const [isSenior, setIsSenior] = useState(false);
 
   // 편집 중인 값
   const [name, setName] = useState("");
@@ -82,6 +84,7 @@ export default function EditProfileScreen() {
       try {
         const me = await getMe(true);
         if (cancelled) return;
+        setIsSenior(me.role === "SENIOR");
         setInitialName(me.nickname);
         setName(me.nickname);
         const g: GenderLabel = me.gender ? API_TO_LABEL[me.gender] : "비공개";
@@ -108,12 +111,18 @@ export default function EditProfileScreen() {
 
   const dirty =
     name.trim() !== initialName ||
-    gender !== initialGender ||
+    (isSenior && gender !== initialGender) ||
     presetIndex !== initialPresetIndex ||
     customUri !== null;
 
+  // 저장 가능 조건: 닉네임 있고 + 프사가 어떤 형태로든 존재(새 프리셋/새 업로드/서버에 이미 등록된 커스텀)
+  // 기존 커스텀 프사만 있고 이름만 바꿔도 저장 가능하도록 initialServerImageUrl 포함.
   const canSave =
-    name.trim().length > 0 && (presetIndex != null || customUri != null) && !saving;
+    name.trim().length > 0 &&
+    (presetIndex != null ||
+      customUri != null ||
+      initialServerImageUrl != null) &&
+    !saving;
 
   // 새로 고른 사진이 있으면 우선 표시. 없으면 preset, 그것도 없으면 서버에서 받은 url
   const currentImage: ImageSourcePropType | null = customUri
@@ -182,6 +191,12 @@ export default function EditProfileScreen() {
       // 새로 찍거나 골라온 사진이 있으면 먼저 S3 업로드 → objectKey 발급
       if (customUri) {
         profileImageObjectKey = await uploadImage("PROFILE_IMAGE", customUri);
+      } else if (presetIndex == null && initialServerImageUrl) {
+        // 기존에 등록된 커스텀 프사가 있고 이번에 프리셋도 안 골랐으면 그대로 유지.
+        // 백엔드 PUT 이 두 필드 모두 omit 시 기본 프사로 리셋하는 동작이라,
+        // presigned URL 에서 objectKey 를 직접 추출해 재전송.
+        const existing = extractProfileObjectKey(initialServerImageUrl);
+        if (existing) profileImageObjectKey = existing;
       }
       await updateMyProfile({
         nickname: name.trim(),
@@ -191,7 +206,8 @@ export default function EditProfileScreen() {
           : presetIndex != null
             ? { profileImage: presetIndex }
             : {}),
-        gender: LABEL_TO_API[gender],
+        // 시니어만 gender 전송. 보호자는 명세상 미전송.
+        ...(isSenior ? { gender: LABEL_TO_API[gender] } : {}),
       });
       router.back();
     } catch (e) {
@@ -253,13 +269,22 @@ export default function EditProfileScreen() {
                 <Pressable
                   key={p.index}
                   onPress={() => handleSelectPreset(p.index)}
-                  style={[styles.presetItem, on && styles.presetItemOn]}
+                  style={styles.presetItem}
                 >
-                  <Image
-                    source={p.source}
-                    style={styles.presetImg}
-                    resizeMode="cover"
-                  />
+                  {/* overflow:hidden 은 이미지 마스킹 + 선택 테두리에만 적용. */}
+                  {/* 체크 뱃지는 이 wrap 바깥으로 빼서 잘리지 않게. */}
+                  <View
+                    style={[
+                      styles.presetImgWrap,
+                      on && styles.presetImgWrapOn,
+                    ]}
+                  >
+                    <Image
+                      source={p.source}
+                      style={styles.presetImg}
+                      resizeMode="cover"
+                    />
+                  </View>
                   {on && (
                     <View style={styles.presetCheck}>
                       <Ionicons name="checkmark" size={12} color="#FFF" />
@@ -298,31 +323,33 @@ export default function EditProfileScreen() {
           />
         </View>
 
-        {/* 성별 */}
-        <View style={styles.section}>
-          <AppText type="pretendard-b" style={styles.sectionTitle}>
-            성별
-          </AppText>
-          <View style={styles.genderRow}>
-            {GENDERS.map((g) => {
-              const on = gender === g;
-              return (
-                <Pressable
-                  key={g}
-                  onPress={() => setGender(g)}
-                  style={[styles.genderBtn, on && styles.genderBtnOn]}
-                >
-                  <AppText
-                    type="pretendard-b"
-                    style={[styles.genderText, on && styles.genderTextOn]}
+        {/* 성별 — 시니어 본인만 수정 가능. 보호자는 섹션 자체 숨김. */}
+        {isSenior && (
+          <View style={styles.section}>
+            <AppText type="pretendard-b" style={styles.sectionTitle}>
+              성별
+            </AppText>
+            <View style={styles.genderRow}>
+              {GENDERS.map((g) => {
+                const on = gender === g;
+                return (
+                  <Pressable
+                    key={g}
+                    onPress={() => setGender(g)}
+                    style={[styles.genderBtn, on && styles.genderBtnOn]}
                   >
-                    {g}
-                  </AppText>
-                </Pressable>
-              );
-            })}
+                    <AppText
+                      type="pretendard-b"
+                      style={[styles.genderText, on && styles.genderTextOn]}
+                    >
+                      {g}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        )}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -395,6 +422,18 @@ export default function EditProfileScreen() {
   );
 }
 
+/**
+ * 백엔드가 내려준 presigned GET URL 에서 profile-image objectKey 부분만 추출.
+ * 형식: `profile-image/{userId}/{uuid}.{ext}` — query string / 호스트 / 버킷 모두 제외.
+ * URL 형식이 바뀌면 null 반환 → 호출자가 적절히 fallback.
+ */
+function extractProfileObjectKey(presignedUrl: string): string | null {
+  const m = presignedUrl.match(
+    /profile-image\/\d+\/[A-Za-z0-9-]+\.[A-Za-z0-9]+/,
+  );
+  return m ? m[0] : null;
+}
+
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
@@ -460,26 +499,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1ECDB",
   },
+  // 바깥 셀 — overflow:hidden 없음. 체크 뱃지가 잘리지 않도록.
   presetItem: {
     width: "30%",
     aspectRatio: 1,
+    position: "relative",
+  },
+  // 이미지 마스킹 + 선택 테두리만 담당
+  presetImgWrap: {
+    width: "100%",
+    height: "100%",
     borderRadius: 999,
     overflow: "hidden",
     borderWidth: 2,
     borderColor: "transparent",
     backgroundColor: "#FAFAF6",
   },
-  presetItemOn: {
+  presetImgWrapOn: {
     borderColor: "#5BC4AE",
   },
   presetImg: {
     width: "100%",
     height: "100%",
   },
+  // 체크 뱃지는 presetItem 의 자식으로, presetImgWrap 바깥. 잘리지 않음.
   presetCheck: {
     position: "absolute",
-    bottom: 4,
-    right: 4,
+    bottom: 0,
+    right: 0,
     width: 22,
     height: 22,
     borderRadius: 11,

@@ -23,6 +23,10 @@ export async function issueInviteCode(
 export interface LinkedCaregiver {
   id: number;
   nickname: string;
+  /** 프리셋 아바타 인덱스 (1~6). 커스텀 업로드 사용 시 null */
+  profileImage?: number | null;
+  /** 업로드된 프사 presigned GET URL (30분 만료). 미설정 시 null */
+  profileImageUrl?: string | null;
 }
 
 /**
