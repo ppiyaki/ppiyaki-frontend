@@ -15,6 +15,7 @@ import {
   onboardCaregiver,
 } from "@/services/auth";
 import { issueInviteCode } from "@/services/care-relations";
+import { applyNotificationPreset } from "@/services/notification-settings";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -99,6 +100,25 @@ export default function NotificationsScreen() {
       };
       const res = await onboardCaregiver(body);
 
+      // 시니어별로 선택한 careMode 에 맞춰 notification-settings preset 적용.
+      // (백엔드가 senior.careMode 만 저장하고 notification-settings 는 기본값으로 두면
+      //  모니터링 화면 첫 진입 시 inferredPreset 이 어긋나 보임)
+      await Promise.all(
+        res.responses.map(async (s, idx) => {
+          const apiMode = body.seniors[idx]?.careMode;
+          if (!apiMode) return;
+          try {
+            await applyNotificationPreset(s.seniorId, apiMode);
+          } catch (presetErr) {
+            console.log(
+              "[onboarding] applyNotificationPreset failed:",
+              s.seniorId,
+              presetErr,
+            );
+          }
+        }),
+      );
+
       // 생성된 시니어들에 대해 초대 코드 일괄 발급
       const codes = await Promise.all(
         res.responses.map<Promise<IssuedCode>>(async (s) => {
@@ -136,7 +156,6 @@ export default function NotificationsScreen() {
         title: isConflict ? "이미 가입됨" : "온보딩 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
       if (isConflict) router.replace("/family" as any);
     } finally {

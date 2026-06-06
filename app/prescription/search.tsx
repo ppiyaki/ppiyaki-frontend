@@ -97,7 +97,6 @@ export default function PrescriptionSearchScreen() {
           message:
             "처방전이 등록되었어요!\n보호자가 검토해드릴 때까지 잠시만 기다려주세요.",
           confirmText: "확인",
-          cancelText: "닫기",
         });
         return;
       }
@@ -111,7 +110,6 @@ export default function PrescriptionSearchScreen() {
         title: "처리 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
     }
   };

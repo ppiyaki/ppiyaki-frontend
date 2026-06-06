@@ -123,7 +123,6 @@ export default function ManualMedicineSetupScreen() {
         title: "등록 완료",
         message: `${itemName} 약이 등록됐어요`,
         confirmText: "확인",
-        cancelText: "닫기",
       });
       // 호출자 역할 별로 메인 화면으로 이동
       try {
@@ -140,7 +139,6 @@ export default function ManualMedicineSetupScreen() {
         title: "등록 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
       setSubmitting(false);
     }

@@ -30,14 +30,31 @@ export default function FamilySignupScreen() {
 
   const trimmedId = loginId.trim();
   const trimmedNick = nickname.trim();
+  // 아이디: 영문/숫자/언더스코어/하이픈 4~30자
+  const idFormatValid = /^[A-Za-z0-9_-]{4,30}$/.test(trimmedId);
   const passwordsMatch = password.length > 0 && password === passwordConfirm;
   const passwordValid = password.length >= 8;
+  const nicknameValid = trimmedNick.length > 0;
   const canSubmit =
-    trimmedId.length >= 4 &&
+    idFormatValid &&
     passwordValid &&
     passwordsMatch &&
-    trimmedNick.length > 0 &&
+    nicknameValid &&
     !submitting;
+
+  // disabled 상태에서 무엇이 부족한지 한 줄 안내 — 가장 우선순위 높은 미충족 항목 1개만
+  const disabledReason: string = (() => {
+    if (trimmedId.length === 0) return "아이디를 입력해주세요";
+    if (trimmedId.length < 4) return "아이디는 4자 이상 입력해주세요";
+    if (!idFormatValid)
+      return "아이디는 영문/숫자/_/- 만 사용할 수 있어요";
+    if (password.length === 0) return "비밀번호를 입력해주세요";
+    if (!passwordValid) return "비밀번호는 8자 이상 입력해주세요";
+    if (passwordConfirm.length === 0) return "비밀번호 확인을 입력해주세요";
+    if (!passwordsMatch) return "비밀번호가 일치하지 않아요";
+    if (!nicknameValid) return "닉네임을 입력해주세요";
+    return "";
+  })();
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -63,7 +80,6 @@ export default function FamilySignupScreen() {
         title: "가입 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
     } finally {
       setSubmitting(false);
@@ -85,13 +101,20 @@ export default function FamilySignupScreen() {
         >
           <Field
             label="아이디"
-            hint="4자 이상"
-            valid={trimmedId.length === 0 || trimmedId.length >= 4}
+            hint="영문/숫자 4~30자"
+            valid={trimmedId.length === 0 || idFormatValid}
+            errorText={
+              trimmedId.length > 0 && !idFormatValid
+                ? trimmedId.length < 4
+                  ? "4자 이상 입력해주세요"
+                  : "영문/숫자/_/- 만 사용할 수 있어요"
+                : ""
+            }
           >
             <TextInput
               value={loginId}
               onChangeText={setLoginId}
-              placeholder="아이디"
+              placeholder="예: ppiyaki_user"
               placeholderTextColor="#AAA"
               autoCapitalize="none"
               autoCorrect={false}
@@ -104,6 +127,11 @@ export default function FamilySignupScreen() {
             label="비밀번호"
             hint="8자 이상"
             valid={password.length === 0 || passwordValid}
+            errorText={
+              password.length > 0 && !passwordValid
+                ? "8자 이상 입력해주세요"
+                : ""
+            }
           >
             <TextInput
               value={password}
@@ -154,6 +182,14 @@ export default function FamilySignupScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
+          {!canSubmit && !!disabledReason && (
+            <AppText
+              type="pretendard-m"
+              style={styles.disabledHint}
+            >
+              {disabledReason}
+            </AppText>
+          )}
           <Pressable
             onPress={handleSubmit}
             disabled={!canSubmit}
@@ -259,6 +295,12 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: "#F1ECDB",
+  },
+  disabledHint: {
+    fontSize: 13,
+    color: "#AA7A1A",
+    textAlign: "center",
+    marginBottom: 10,
   },
   submitBtn: {
     height: 56,

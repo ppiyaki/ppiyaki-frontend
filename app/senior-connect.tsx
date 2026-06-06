@@ -8,11 +8,13 @@ import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -47,7 +49,6 @@ export default function SeniorConnectScreen() {
         title: "연결 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
       setCode("");
       inputRef.current?.focus();
@@ -64,6 +65,8 @@ export default function SeniorConnectScreen() {
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // fixed footer 가 keyboard 위로 너무 많이 올라와 본문을 가리던 문제 보정
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
         {/* 상단 — 뒤로가기 */}
         <View style={styles.topBar}>
@@ -82,6 +85,8 @@ export default function SeniorConnectScreen() {
           </Pressable>
         </View>
 
+        {/* OTP 외 영역 탭 시 키보드 내리기 */}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.inner}>
           {/* 상단 아이콘 + 헤드라인 */}
           <View style={styles.headIcon}>
@@ -114,6 +119,7 @@ export default function SeniorConnectScreen() {
             </View>
           </View>
         </View>
+        </TouchableWithoutFeedback>
 
         <View style={styles.footer}>
           <Pressable

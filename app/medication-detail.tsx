@@ -121,7 +121,6 @@ export default function MedicationDetailScreen() {
         title: "추가 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
     } finally {
       setAdding(false);
@@ -147,7 +146,6 @@ export default function MedicationDetailScreen() {
         title: "삭제 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
     }
   };
@@ -171,7 +169,6 @@ export default function MedicationDetailScreen() {
         title: "삭제 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
     }
   };

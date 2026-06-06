@@ -292,13 +292,23 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    // 짧은 화면에서 캐릭터가 헤더/카드 영역으로 침범하지 않도록 클리핑
+    overflow: "hidden",
   },
   characterWrap: {
     alignItems: "center",
+    // 캐릭터 비율 유지하며 부모(characterSection) 안에 들어가도록 flex 기반 크기
+    flex: 1,
+    width: 238,
+    maxHeight: 244,
+    justifyContent: "center",
   },
   characterImg: {
-    width: 238,
-    height: 244,
+    // 부모 가용 공간만큼 채우되 원본 크기 초과는 안 됨. resizeMode="contain" 으로 비율 유지.
+    flex: 1,
+    width: "100%",
+    maxWidth: 238,
+    maxHeight: 244,
   },
   bubble: {
     position: "absolute",
@@ -409,6 +419,9 @@ const styles = StyleSheet.create({
   menuBtn: {
     flex: 1,
     aspectRatio: 1,
+    // 넓은 화면(iPad 호환 모드 등)에서 버튼이 정사각형 유지하려고 무한정 커져
+    // 캐릭터/헤더 영역을 짓누르는 걸 방지. 일반 휴대폰에선 영향 없음.
+    maxHeight: 150,
     backgroundColor: "#FFF",
     borderRadius: 20,
     paddingVertical: 14,

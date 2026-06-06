@@ -217,7 +217,6 @@ export default function EditProfileScreen() {
         title: "저장 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
       setSaving(false);
     }

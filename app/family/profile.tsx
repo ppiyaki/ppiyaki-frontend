@@ -11,6 +11,7 @@ import {
   unlinkSenior,
 } from "@/services/caregivers";
 import { createSenior } from "@/services/seniors";
+import { applyNotificationPreset } from "@/services/notification-settings";
 import { updateSeniorProfile } from "@/services/users";
 import type { CareMode, SeniorGender } from "@/services/auth";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,7 +23,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -126,7 +130,6 @@ export default function FamilyProfileScreen() {
         title: "해제 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
     }
   };
@@ -323,11 +326,19 @@ function AddSeniorModal({
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      await createSenior({
+      const created = await createSenior({
         nickname: nickname.trim(),
         gender: gender!,
         careMode: careMode!,
       });
+      // 시니어 엔티티엔 careMode 저장되지만 notification-settings 는 기본값으로 생성되어
+      // 모니터링 화면 inferredPreset 추론이 어긋남 → 생성 직후 preset 도 같이 적용.
+      try {
+        await applyNotificationPreset(created.seniorId, careMode!);
+      } catch (presetErr) {
+        console.log("[add-senior] applyNotificationPreset failed:", presetErr);
+        // preset 실패해도 시니어는 이미 생성됨 — 다음 모니터링 화면에서 수동 조정 가능
+      }
       onCreated();
     } catch (e) {
       const msg =
@@ -336,7 +347,6 @@ function AddSeniorModal({
         title: "추가 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
       setSubmitting(false);
     }
@@ -349,7 +359,12 @@ function AddSeniorModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+      {/* 배경 탭 시 입력값 유실 막기 위해 onClose 대신 키보드만 내린다 — 닫기는 X 버튼으로 */}
+      <Pressable style={styles.modalBackdrop} onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={addStyles.kav}
+        >
         <Pressable style={styles.modalCard} onPress={() => {}}>
           <View style={styles.modalHead}>
             <AppText type="pretendard-b" style={styles.modalTitle}>
@@ -511,12 +526,17 @@ function AddSeniorModal({
             </Pressable>
           </View>
         </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </Modal>
   );
 }
 
 const addStyles = StyleSheet.create({
+  kav: {
+    width: "100%",
+    alignItems: "center",
+  },
   fieldGroup: {
     gap: 6,
   },
@@ -1344,7 +1364,6 @@ function EditSeniorProfileModal({
         title: "수정 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
       setSubmitting(false);
     }

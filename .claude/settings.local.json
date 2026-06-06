@@ -12,7 +12,8 @@
       "Bash(echo \"EXIT=$?\")",
       "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./app.json'\\), null, 2\\)\\)\")",
       "Bash(echo \"JSON valid: $?\")",
-      "Bash(node -e \"const plugin = require\\('./plugins/with-modular-headers.js'\\); console.log\\('Plugin loaded, type:', typeof plugin\\)\")"
+      "Bash(node -e \"const plugin = require\\('./plugins/with-modular-headers.js'\\); console.log\\('Plugin loaded, type:', typeof plugin\\)\")",
+      "Bash(git checkout *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\cjy03\\Ppiyaki\\services"

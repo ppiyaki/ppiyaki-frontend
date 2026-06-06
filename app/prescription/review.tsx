@@ -229,7 +229,6 @@ export default function PrescriptionReviewScreen() {
         message:
           "처방전이 등록되었어요!\n보호자가 검토해드릴 때까지 잠시만 기다려주세요.",
         confirmText: "확인",
-        cancelText: "닫기",
       });
       return;
     }
@@ -239,7 +238,6 @@ export default function PrescriptionReviewScreen() {
         message:
           "선택한 복약 시간(아침/점심/저녁)이 시니어 프로필에 설정되어 있지 않아요.\n복약 시간은 시니어가 처음으로 로그인할때 자동으로 설정돼요",
         confirmText: "확인",
-        cancelText: "닫기",
       });
       return;
     }
@@ -253,7 +251,6 @@ export default function PrescriptionReviewScreen() {
       title: "처리 실패",
       message: msg,
       confirmText: "확인",
-      cancelText: "닫기",
     });
   };
 
@@ -349,7 +346,6 @@ export default function PrescriptionReviewScreen() {
         message:
           "아직 결정하지 않은 약이 있어요.\n모두 확인 후 다시 시도해주세요.",
         confirmText: "확인",
-        cancelText: "닫기",
       });
       return;
     }
@@ -411,7 +407,6 @@ export default function PrescriptionReviewScreen() {
         title: "확정 완료",
         message: lines.join("\n"),
         confirmText: "확인",
-        cancelText: "닫기",
       });
 
       // 호출자 역할에 따라 분기 — 시니어/보호자 영역은 절대 교차 X

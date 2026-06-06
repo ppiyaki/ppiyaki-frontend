@@ -41,7 +41,13 @@ export default function PageHeader({
         </AppText>
       </Pressable>
 
-      <AppText type="pretendard-b" style={styles.title}>
+      <AppText
+        type="pretendard-b"
+        style={styles.title}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
         {title}
       </AppText>
 

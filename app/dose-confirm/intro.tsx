@@ -206,7 +206,6 @@ export default function DoseConfirmIntroScreen() {
         title: "인증 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
       setSkipping(false);
     }

@@ -121,7 +121,6 @@ export default function SeniorMealTimesScreen() {
         title: "저장 완료",
         message: "시니어의 복약 시간이 저장됐어요",
         confirmText: "확인",
-        cancelText: "닫기",
       });
     } catch (e) {
       const msg =
@@ -130,7 +129,6 @@ export default function SeniorMealTimesScreen() {
         title: "저장 실패",
         message: msg,
         confirmText: "확인",
-        cancelText: "닫기",
       });
     } finally {
       setSaving(false);

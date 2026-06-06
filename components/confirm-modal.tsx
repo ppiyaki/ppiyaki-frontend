@@ -17,11 +17,13 @@ export default function ConfirmModal({
   title,
   message,
   confirmText = "확인",
-  cancelText = "취소",
+  cancelText,
   danger,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  // cancelText 미지정 시 = 단일 버튼 알림 모드 (확인만 노출, "둘 다 똑같이 닫힘" 혼동 방지)
+  const isAlertMode = !cancelText;
   return (
     <Modal
       visible={visible}
@@ -41,18 +43,20 @@ export default function ConfirmModal({
           ) : null}
 
           <View style={styles.buttonRow}>
-            <Pressable
-              onPress={onCancel}
-              style={({ pressed }) => [
-                styles.btn,
-                styles.cancelBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <AppText type="pretendard-b" style={styles.cancelText}>
-                {cancelText}
-              </AppText>
-            </Pressable>
+            {!isAlertMode && (
+              <Pressable
+                onPress={onCancel}
+                style={({ pressed }) => [
+                  styles.btn,
+                  styles.cancelBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <AppText type="pretendard-b" style={styles.cancelText}>
+                  {cancelText}
+                </AppText>
+              </Pressable>
+            )}
             <Pressable
               onPress={onConfirm}
               style={({ pressed }) => [

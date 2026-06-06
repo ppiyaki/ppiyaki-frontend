@@ -147,7 +147,6 @@ export default function MyCaregiversScreen() {
           title: "잠시 후에 다시 보내주세요",
           message: "방금 안부를 보낸 직후에는 잠시 쉬어주세요.",
           confirmText: "확인",
-          cancelText: "닫기",
         });
       } else {
         const msg =
@@ -158,7 +157,6 @@ export default function MyCaregiversScreen() {
           title: "전송 실패",
           message: msg,
           confirmText: "확인",
-          cancelText: "닫기",
         });
       }
     } finally {
