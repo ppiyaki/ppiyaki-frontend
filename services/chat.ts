@@ -1,4 +1,4 @@
-import { apiFetch, API_BASE } from "./api";
+import { apiFetch, API_BASE, refreshAccessToken } from "./api";
 import { getAccessToken } from "./token-storage";
 
 export interface ChatSession {
@@ -108,29 +108,27 @@ function parseSseChunks(text: string, handlers: SseHandlers): boolean {
  * 콜백이 호출됨(=스트리밍 효과 없음). 그래서 XMLHttpRequest 의 onreadystatechange
  * (readyState === 3 LOADING) 를 활용해 응답이 도착하는 대로 점진적으로 파싱한다.
  *
- * 동작:
- * - xhr.responseText 는 누적이라 마지막으로 읽은 offset 이후만 잘라 buffer 에 붙임
- * - SSE 이벤트 구분자(`\n\n`) 단위로 끊어 parseSseChunks 호출
- * - `[DONE]` 만나면 abort + onDone
- * - HTTP 에러는 readyState === 4 DONE 시점에 본문 같이 묶어 onError
+ * 401 처리:
+ *  - apiFetch 와 동일한 정책으로 1회 토큰 refresh + 재시도
+ *  - 401 응답은 status === 4 이전에 본문/청크가 안 오므로 첫 시도에서 onChunk 가
+ *    호출됐을 가능성이 없다 → 재시도 시 사용자 화면이 어긋날 위험 없음
  */
-async function streamSse(
+type AttemptOutcome =
+  | { kind: "done" }
+  | { kind: "unauth"; body: string }
+  | { kind: "error"; error: Error };
+
+function runSseAttempt(
   path: string,
   init: RequestInit,
   handlers: SseHandlers,
-): Promise<void> {
-  const token = await getAccessToken();
-
-  if (__DEV__) {
-    console.log("[sse] →", path, "method=", init.method ?? "GET");
-  }
-
-  return new Promise<void>((resolve) => {
+  token: string | null,
+): Promise<AttemptOutcome> {
+  return new Promise<AttemptOutcome>((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open(init.method ?? "GET", `${API_BASE}${path}`);
 
-    // 헤더 적용 — init.headers 는 Content-Type 등을 포함할 수 있고,
-    // multipart/form-data 의 경우 Content-Type 을 자동 설정해야 하므로 set 하지 않음.
+    // 헤더 적용 — multipart/form-data 의 Content-Type 은 RN 이 자동 설정하므로 그대로 둠.
     const initHeaders =
       (init.headers as Record<string, string> | undefined) ?? {};
     for (const [k, v] of Object.entries(initHeaders)) {
@@ -147,36 +145,28 @@ async function streamSse(
     let buffer = "";
     let settled = false;
 
-    const settle = (kind: "done" | "error", err?: Error) => {
+    const finish = (outcome: AttemptOutcome) => {
       if (settled) return;
       settled = true;
-      if (kind === "error") {
-        handlers.onError?.(err ?? new Error("네트워크 오류"));
-      } else {
-        handlers.onDone?.();
-      }
-      resolve();
+      resolve(outcome);
     };
 
     const drain = () => {
-      // 도착한 누적 응답에서 새 영역만 잘라 buffer 에 누적
       const fresh = xhr.responseText.slice(lastIndex);
       if (!fresh) return false;
       lastIndex = xhr.responseText.length;
       buffer += fresh;
-      // SSE 이벤트 단위(`\n\n`)로 파싱
       let idx: number;
       while ((idx = buffer.indexOf("\n\n")) >= 0) {
         const event = buffer.slice(0, idx);
         buffer = buffer.slice(idx + 2);
         if (parseSseChunks(event, handlers)) {
-          // [DONE] 만남 → 즉시 종료
           try {
             xhr.abort();
           } catch {
             // noop
           }
-          settle("done");
+          finish({ kind: "done" });
           return true;
         }
       }
@@ -185,55 +175,95 @@ async function streamSse(
 
     xhr.onreadystatechange = () => {
       if (settled) return;
-      // readyState 3: 본문이 도착하는 중 — 진짜 스트리밍 지점
       if (xhr.readyState === 3) {
-        if (xhr.status >= 400) return; // 에러는 4 에서 처리
+        if (xhr.status >= 400) return;
         drain();
         return;
       }
-      // readyState 4: 응답 완전 종료
       if (xhr.readyState === 4) {
         if (__DEV__) {
           console.log("[sse] ← status", xhr.status);
         }
-        if (xhr.status >= 400) {
-          const body = (xhr.responseText ?? "").slice(0, 200);
-          settle(
-            "error",
-            new Error(
-              `SSE 연결 실패 (${xhr.status})${body ? ` — ${body}` : ""}`,
-            ),
-          );
+        if (xhr.status === 401) {
+          finish({ kind: "unauth", body: xhr.responseText ?? "" });
           return;
         }
-        // 잔여 데이터 처리
-        const reachedDone = drain();
-        if (reachedDone) return;
-        // [DONE] 없이 끝났을 때 마지막 버퍼도 한 번 더 파싱
+        if (xhr.status >= 400) {
+          const body = (xhr.responseText ?? "").slice(0, 200);
+          finish({
+            kind: "error",
+            error: new Error(
+              `SSE 연결 실패 (${xhr.status})${body ? ` — ${body}` : ""}`,
+            ),
+          });
+          return;
+        }
+        const reached = drain();
+        if (reached) return;
         if (buffer.trim().length > 0) {
           parseSseChunks(buffer, handlers);
           buffer = "";
         }
-        settle("done");
+        finish({ kind: "done" });
       }
     };
 
     xhr.onerror = () => {
       if (__DEV__) console.log("[sse] xhr.onerror");
-      settle("error", new Error("네트워크 오류"));
+      finish({ kind: "error", error: new Error("네트워크 오류") });
     };
     xhr.ontimeout = () => {
-      settle("error", new Error("응답 시간 초과"));
+      finish({ kind: "error", error: new Error("응답 시간 초과") });
     };
 
     try {
-      // init.body 는 string | FormData | Blob 등 — XHR 가 그대로 처리
       xhr.send((init.body as XMLHttpRequestBodyInit | null) ?? null);
     } catch (e) {
       if (__DEV__) console.log("[sse] xhr.send threw:", e);
-      settle("error", e instanceof Error ? e : new Error("요청 전송 실패"));
+      finish({
+        kind: "error",
+        error: e instanceof Error ? e : new Error("요청 전송 실패"),
+      });
     }
   });
+}
+
+async function streamSse(
+  path: string,
+  init: RequestInit,
+  handlers: SseHandlers,
+): Promise<void> {
+  if (__DEV__) {
+    console.log("[sse] →", path, "method=", init.method ?? "GET");
+  }
+
+  let token = await getAccessToken();
+  let outcome = await runSseAttempt(path, init, handlers, token);
+
+  // 401 → refresh 1회 + 재시도. 이 시점에 handlers.onChunk 는 호출된 적 없음(401 응답은
+  // SSE 청크가 흐르기 전에 끝나므로) → 사용자 말풍선/UI 가 어긋날 일이 없다.
+  if (outcome.kind === "unauth") {
+    if (__DEV__) console.log("[sse] 401 → refresh & retry");
+    try {
+      await refreshAccessToken();
+    } catch (e) {
+      handlers.onError?.(
+        e instanceof Error ? e : new Error("인증이 만료되었습니다"),
+      );
+      return;
+    }
+    token = await getAccessToken();
+    outcome = await runSseAttempt(path, init, handlers, token);
+  }
+
+  if (outcome.kind === "done") {
+    handlers.onDone?.();
+  } else if (outcome.kind === "unauth") {
+    // refresh 후에도 401 → 토큰 진짜 만료 / 권한 문제
+    handlers.onError?.(new Error("인증이 만료되었습니다. 다시 로그인해주세요."));
+  } else {
+    handlers.onError?.(outcome.error);
+  }
 }
 
 /** 단발 텍스트 대화 (세션 없이) — SSE 스트리밍 */

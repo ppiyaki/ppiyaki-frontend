@@ -53,7 +53,13 @@ export interface ApiOptions extends Omit<RequestInit, "signal"> {
 
 let refreshPromise: Promise<void> | null = null;
 
-async function refreshAccessToken(): Promise<void> {
+/**
+ * 액세스 토큰을 refreshToken 으로 갱신.
+ * - 동시 호출 시 in-flight Promise 를 재사용해 중복 요청 방지
+ * - 실패하면 토큰 비우고 ApiError(401) throw
+ * - apiFetch 의 401 자동 재시도 외에 SSE 등 별도 fetch 경로에서도 직접 호출 가능
+ */
+export async function refreshAccessToken(): Promise<void> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
