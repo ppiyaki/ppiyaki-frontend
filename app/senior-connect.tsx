@@ -4,6 +4,7 @@ import { ApiError } from "@/services/api";
 import { loginWithInviteCode } from "@/services/auth";
 import { resolveAuthRoute, ROUTE_PATHS } from "@/services/post-login";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
@@ -157,43 +158,78 @@ function OtpInput({
   onChange: (v: string) => void;
   inputRef: React.RefObject<TextInput | null>;
 }) {
+  // iOS 에선 hidden TextInput(opacity:0 + caretHidden) 위에 paste 메뉴가 뜨지 않아
+  // 클립보드에 복사한 코드를 시스템 paste UX 로 붙일 수 없다.
+  // → 명시적인 "붙여넣기" 버튼으로 expo-clipboard 에서 직접 읽어와 채운다.
+  const handlePaste = async () => {
+    try {
+      const text = await Clipboard.getStringAsync();
+      // 공백·하이픈 제거 + 영숫자만 → 앞 6글자
+      const cleaned = (text ?? "")
+        .replace(/[^A-Za-z0-9]/g, "")
+        .slice(0, 6);
+      if (cleaned.length > 0) {
+        onChange(cleaned);
+      }
+    } catch {
+      // 클립보드 접근 실패는 조용히 무시 (사용자가 다시 시도 가능)
+    }
+  };
+
   return (
-    <Pressable style={otp.wrapper} onPress={() => inputRef.current?.focus()}>
-      <TextInput
-        ref={inputRef}
-        value={value}
-        // RN 안드로이드 controlled TextInput 버그: onChangeText 내부에서 toUpperCase 같은
-        // 변환을 하면 사용자가 친 raw 텍스트와 value prop이 어긋나 한 글자가 중복 입력됨.
-        // 대문자 변환은 표시/제출 시점에만 수행한다.
-        onChangeText={(t) => onChange(t.replace(/\s/g, ""))}
-        maxLength={6}
-        keyboardType="default"
-        autoCapitalize="none"
-        autoCorrect={false}
-        caretHidden
-        style={otp.hidden}
-      />
-      <View style={otp.row} pointerEvents="none">
-        {Array.from({ length: 6 }, (_, i) => {
-          const filled = value[i] !== undefined;
-          const isCurrent = value.length === i;
-          return (
-            <View
-              key={i}
-              style={[
-                otp.box,
-                filled && otp.boxFilled,
-                isCurrent && otp.boxCurrent,
-              ]}
-            >
-              <AppText type="extrabold" style={otp.char}>
-                {value[i]?.toUpperCase() ?? ""}
-              </AppText>
-            </View>
-          );
-        })}
-      </View>
-    </Pressable>
+    <View style={otp.container}>
+      <Pressable style={otp.wrapper} onPress={() => inputRef.current?.focus()}>
+        <TextInput
+          ref={inputRef}
+          value={value}
+          // RN 안드로이드 controlled TextInput 버그: onChangeText 내부에서 toUpperCase 같은
+          // 변환을 하면 사용자가 친 raw 텍스트와 value prop이 어긋나 한 글자가 중복 입력됨.
+          // 대문자 변환은 표시/제출 시점에만 수행한다.
+          onChangeText={(t) => onChange(t.replace(/\s/g, ""))}
+          maxLength={6}
+          keyboardType="default"
+          autoCapitalize="none"
+          autoCorrect={false}
+          caretHidden
+          // iOS 1회용 코드 자동 완성 힌트 — SMS 로 받은 코드 자동 노출에 도움
+          textContentType="oneTimeCode"
+          style={otp.hidden}
+        />
+        <View style={otp.row} pointerEvents="none">
+          {Array.from({ length: 6 }, (_, i) => {
+            const filled = value[i] !== undefined;
+            const isCurrent = value.length === i;
+            return (
+              <View
+                key={i}
+                style={[
+                  otp.box,
+                  filled && otp.boxFilled,
+                  isCurrent && otp.boxCurrent,
+                ]}
+              >
+                <AppText type="extrabold" style={otp.char}>
+                  {value[i]?.toUpperCase() ?? ""}
+                </AppText>
+              </View>
+            );
+          })}
+        </View>
+      </Pressable>
+      <Pressable
+        onPress={handlePaste}
+        hitSlop={8}
+        style={({ pressed }) => [
+          otp.pasteBtn,
+          pressed && { opacity: 0.7 },
+        ]}
+      >
+        <Ionicons name="clipboard-outline" size={14} color="#5BC4AE" />
+        <AppText type="pretendard-b" style={otp.pasteText}>
+          붙여넣기
+        </AppText>
+      </Pressable>
+    </View>
   );
 }
 
@@ -297,9 +333,25 @@ const styles = StyleSheet.create({
 });
 
 const otp = StyleSheet.create({
+  container: {
+    width: "100%",
+    gap: 8,
+  },
   wrapper: {
     width: "100%",
     height: 64,
+  },
+  pasteBtn: {
+    alignSelf: "flex-end",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  pasteText: {
+    fontSize: 13,
+    color: "#5BC4AE",
   },
   hidden: {
     position: "absolute",

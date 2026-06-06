@@ -1,7 +1,7 @@
 import AppText from "@/components/app-text";
 import SeniorSummaryHeader from "@/components/senior-summary-header";
 import { ApiError } from "@/services/api";
-import { resolveLinkedSenior } from "@/services/caregivers";
+import { LinkedSenior, listLinkedSeniors } from "@/services/caregivers";
 import {
   DailyDashboard,
   DailySlot,
@@ -20,6 +20,7 @@ import {
   MealSlot,
   MealTimes,
 } from "@/services/user-settings";
+import { resolveProfileImage } from "@/utils/profile-image";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { ComponentProps, useCallback, useEffect, useState } from "react";
@@ -27,6 +28,7 @@ import {
   ActivityIndicator,
   Image,
   ImageSourcePropType,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -138,23 +140,37 @@ export default function FamilyRecordScreen() {
 
   // 날짜 파라미터가 있으면 일간 탭을 자동으로 선택
   const [period, setPeriod] = useState<Period>(focusedDate ? "day" : "day");
+  const [seniors, setSeniors] = useState<LinkedSenior[]>([]);
   const [seniorId, setSeniorId] = useState<number | null>(null);
-  const [seniorName, setSeniorName] = useState<string>("어르신");
   const [caregiverName, setCaregiverName] = useState<string>("");
   const [daysLeft, setDaysLeft] = useState<number>(0);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const selectedSenior = seniors.find((s) => s.id === seniorId) ?? null;
+  const seniorName = selectedSenior?.nickname ?? "어르신";
+  const seniorImage = resolveProfileImage({
+    profileImage: selectedSenior?.profileImage ?? null,
+    profileImageUrl: selectedSenior?.profileImageUrl ?? null,
+    fallback: DEFAULT_SENIOR_IMAGE,
+  });
 
   // dateParam이 바뀌면 day 탭으로 강제 전환 (다른 탭에 있던 상태로 알림 탭하면)
   useEffect(() => {
     if (focusedDate) setPeriod("day");
   }, [focusedDate]);
 
-  // 시니어 ID 부트스트랩
+  // 시니어 목록 로드 + 첫 진입 시 첫 시니어 선택. 이미 선택된 id 가 있고 목록에 남아 있으면 유지.
   useEffect(() => {
     void (async () => {
-      const s = await resolveLinkedSenior();
-      if (s) {
-        setSeniorId(s.id);
-        setSeniorName(s.nickname);
+      try {
+        const list = await listLinkedSeniors();
+        setSeniors(list);
+        setSeniorId((prev) => {
+          if (prev != null && list.some((s) => s.id === prev)) return prev;
+          return list[0]?.id ?? null;
+        });
+      } catch (e) {
+        console.log("[record] listLinkedSeniors failed:", e);
       }
     })();
   }, []);
@@ -186,7 +202,10 @@ export default function FamilyRecordScreen() {
           name={seniorName}
           caregiver={caregiverName}
           daysLeft={daysLeft}
-          image={DEFAULT_SENIOR_IMAGE}
+          image={seniorImage}
+          onPressName={
+            seniors.length > 1 ? () => setPickerOpen(true) : undefined
+          }
         />
         <PeriodToggle value={period} onChange={setPeriod} />
       </View>
@@ -209,6 +228,63 @@ export default function FamilyRecordScreen() {
           )}
         </Animated.View>
       </ScrollView>
+
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <Pressable
+          style={styles.pickerBackdrop}
+          onPress={() => setPickerOpen(false)}
+        >
+          <Pressable style={styles.pickerSheet} onPress={() => {}}>
+            <AppText type="pretendard-b" style={styles.pickerTitle}>
+              시니어 선택
+            </AppText>
+            {seniors.map((sr) => {
+              const on = sr.id === seniorId;
+              return (
+                <Pressable
+                  key={sr.id}
+                  onPress={() => {
+                    setSeniorId(sr.id);
+                    setPickerOpen(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.pickerRow,
+                    on && styles.pickerRowOn,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <View style={styles.pickerAvatarRing}>
+                    <Image
+                      source={resolveProfileImage({
+                        profileImage: sr.profileImage ?? null,
+                        profileImageUrl: sr.profileImageUrl ?? null,
+                        fallback: DEFAULT_SENIOR_IMAGE,
+                      })}
+                      style={styles.pickerAvatar}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <AppText
+                    type={on ? "pretendard-b" : "pretendard-m"}
+                    style={[styles.pickerName, on && styles.pickerNameOn]}
+                    numberOfLines={1}
+                  >
+                    {sr.nickname}
+                  </AppText>
+                  {on && (
+                    <Ionicons name="checkmark" size={20} color="#5BC4AE" />
+                  )}
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -977,6 +1053,64 @@ const styles = StyleSheet.create({
   loadingBox: {
     paddingVertical: 80,
     alignItems: "center",
+  },
+
+  /* ── 시니어 선택 picker — 홈 화면과 동일 디자인 (중앙 모달) ── */
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  pickerSheet: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#FFF",
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    gap: 10,
+  },
+  pickerTitle: {
+    fontSize: 18,
+    color: "#222",
+    marginBottom: 6,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+    backgroundColor: "#FFF",
+  },
+  pickerRowOn: {
+    borderColor: "#5BC4AE",
+    backgroundColor: "#F4FBF9",
+  },
+  pickerAvatarRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+  },
+  pickerAvatar: {
+    width: "100%",
+    height: "100%",
+  },
+  pickerName: {
+    flex: 1,
+    fontSize: 16,
+    color: "#444",
+  },
+  pickerNameOn: {
+    color: "#222",
   },
 });
 

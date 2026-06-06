@@ -64,21 +64,22 @@ export default function MyCaregiversScreen() {
   const ensureTicker = useCallback(() => {
     if (tickerRef.current) return;
     tickerRef.current = setInterval(() => {
+      // anyActive/next 를 setState 콜백 안에서 계산하면 외부 if 체크가
+      // 콜백 실행 전에 돌아 항상 false → 첫 tick 직후 ticker 가 스스로 끊긴다.
+      // 그래서 계산은 바깥에서 먼저 하고, setCooldowns 는 결과만 받는다.
+      const next: Record<number, number> = {};
       let anyActive = false;
-      setCooldowns(() => {
-        const next: Record<number, number> = {};
-        for (const [id, ts] of lastPingAt.entries()) {
-          const remaining = Math.max(
-            0,
-            Math.ceil((PING_COOLDOWN_MS - (Date.now() - ts)) / 1000),
-          );
-          if (remaining > 0) {
-            next[id] = remaining;
-            anyActive = true;
-          }
+      for (const [id, ts] of lastPingAt.entries()) {
+        const remaining = Math.max(
+          0,
+          Math.ceil((PING_COOLDOWN_MS - (Date.now() - ts)) / 1000),
+        );
+        if (remaining > 0) {
+          next[id] = remaining;
+          anyActive = true;
         }
-        return next;
-      });
+      }
+      setCooldowns(next);
       if (!anyActive && tickerRef.current) {
         clearInterval(tickerRef.current);
         tickerRef.current = null;
