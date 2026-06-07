@@ -124,12 +124,17 @@ export default function FamilyHomeScreen() {
   const [daily, setDaily] = useState<DailyDashboard | null>(null);
   const [weekly, setWeekly] = useState<WeeklyDashboard | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** 화면 재진입마다 +1 — 시니어 변경 외 외부 변경(mealTimes 등) 후에도 dashboard 재조회 */
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const senior = seniors.find((s) => s.id === selectedSeniorId) ?? null;
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
+      // 시니어 변경이 없어도 다른 설정 화면(메뉴얼 시간 등) 다녀온 직후 재진입 시
+      // 대시보드를 다시 받아오도록 트리거.
+      setRefreshKey((k) => k + 1);
 
       // 0) 온보딩 미완료 사용자 가드
       // 백엔드가 isOnboarded=true 로 잘못 보내도, 실제로 닉네임이 없으면
@@ -242,7 +247,7 @@ export default function FamilyHomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSeniorId]);
+  }, [selectedSeniorId, refreshKey]);
 
   const doses: Dose[] = daily?.slots.map(mapDailySlotToDose) ?? [];
   const completed = doses.filter((d) => d.status === "done").length;

@@ -57,13 +57,70 @@ const SLOT_BG: Record<MealSlot, string> = {
 /** v0.9.3: candidate별 보호자가 선택한 confirmedMealSlots 로컬 상태 */
 type SlotMap = Record<number, Set<MealSlot>>;
 
-/** v0.9.8: candidate별 잔여분/총량 (단위: 정/캡슐 등). 디폴트 30. */
+/** v0.9.8: candidate별 잔여분/총량 (단위: 정/캡슐 등). */
 interface AmountState {
   total: string;
   remaining: string;
 }
 type AmountMap = Record<number, AmountState>;
+/** 파싱 실패·정보 부족 시 사용할 안전 디폴트 */
 const DEFAULT_AMOUNT = "30";
+
+/** extractedSchedule 에서 "1일 N회" 의 N(하루 빈도) 만 추출. 못 잡으면 null. */
+function parseFrequencyPerDay(schedule: string | undefined): number | null {
+  if (!schedule) return null;
+  const m = schedule.match(/(\d+)\s*회/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** extractedSchedule 에서 "N일분" 의 N(처방 일수) 만 추출. 못 잡으면 null. */
+function parseDaysSupply(schedule: string | undefined): number | null {
+  if (!schedule) return null;
+  // "1일 2회 7일분" 의 "1일" 과 혼동 방지 — "일분" 패턴 우선
+  const m = schedule.match(/(\d+)\s*일\s*분/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * OCR 추출 정보로 총량 추론.
+ * 예: extractedSchedule="1일 2회 7일분" + extractedDosage="1정" → 2 × 7 × 1 = 14
+ * 패턴 못 잡거나 0/NaN 이면 DEFAULT_AMOUNT(30) 폴백.
+ */
+function inferTotalAmount(
+  schedule: string | undefined,
+  dosage: string | undefined,
+): string {
+  const freq = parseFrequencyPerDay(schedule);
+  const days = parseDaysSupply(schedule);
+  if (freq == null || days == null) return DEFAULT_AMOUNT;
+  const doseMatch = dosage?.match(/(\d+(?:\.\d+)?)/);
+  const dose = doseMatch ? parseFloat(doseMatch[1]) : 1;
+  const total = Math.round(freq * days * dose);
+  if (!Number.isFinite(total) || total <= 0) return DEFAULT_AMOUNT;
+  return String(total);
+}
+
+/**
+ * 하루 빈도로 추천 슬롯 도출 (의학적 관례 따름).
+ * 백엔드 LLM 이 거의 항상 전 끼니로 추천해서 의미가 없어 프론트에서 override.
+ *  - 1회: 아침
+ *  - 2회: 아침/저녁
+ *  - 3회 이상: 아침/점심/저녁
+ */
+function inferSuggestedSlots(
+  schedule: string | undefined,
+  fallback: ServerMealSlot[] | undefined,
+): ServerMealSlot[] {
+  const freq = parseFrequencyPerDay(schedule);
+  if (freq == null) return fallback ?? [];
+  if (freq <= 1) return ["BREAKFAST"];
+  if (freq === 2) return ["BREAKFAST", "DINNER"];
+  return ["BREAKFAST", "LUNCH", "DINNER"];
+}
 
 export default function PrescriptionReviewScreen() {
   const router = useRouter();
@@ -106,7 +163,9 @@ export default function PrescriptionReviewScreen() {
     }, [load]),
   );
 
-  // detail 로드 후 candidate 별 초기 슬롯 = confirmedMealSlots ?? suggestedMealSlots
+  // detail 로드 후 candidate 별 초기 슬롯
+  //  - 보호자가 이미 confirm 한 적 있으면 그걸로
+  //  - 아니면 extractedSchedule 의 "N회" 로 추론한 슬롯 (백엔드의 전 끼니 기본값보다 정확)
   useEffect(() => {
     if (!detail) return;
     setSlotMap((prev) => {
@@ -114,17 +173,22 @@ export default function PrescriptionReviewScreen() {
       for (const c of detail.candidates) {
         if (next[c.id]) continue; // 사용자가 이미 만진 candidate는 보존
         const seed: ServerMealSlot[] =
-          c.confirmedMealSlots ?? c.suggestedMealSlots ?? [];
+          c.confirmedMealSlots ??
+          inferSuggestedSlots(c.extractedSchedule, c.suggestedMealSlots);
         next[c.id] = new Set(seed.map(fromServerSlot));
       }
       return next;
     });
-    // v0.9.8: candidate별 초기 잔여분 = 디폴트 30/30
+    // candidate별 초기 잔여분 = OCR 추출 정보로 추론 (예: "1일 2회 7일분" + "1정" → 14)
     setAmountMap((prev) => {
       const next: AmountMap = { ...prev };
       for (const c of detail.candidates) {
         if (next[c.id]) continue;
-        next[c.id] = { total: DEFAULT_AMOUNT, remaining: DEFAULT_AMOUNT };
+        const inferred = inferTotalAmount(
+          c.extractedSchedule,
+          c.extractedDosage,
+        );
+        next[c.id] = { total: inferred, remaining: inferred };
       }
       return next;
     });
@@ -218,6 +282,16 @@ export default function PrescriptionReviewScreen() {
     chosenItemSeq?: string,
   ) => {
     if (!prescriptionId) return;
+    // ACCEPTED 시 슬롯 1개 이상 선택 필수 (회색 버튼이지만 탭은 가능 → 여기서 가드)
+    if (decision === "ACCEPTED" && (slotMap[candidateId]?.size ?? 0) === 0) {
+      await confirm({
+        title: "복약 시간대를 선택해주세요",
+        message:
+          "이 약을 언제 드시는지 (아침/점심/저녁)\n하나 이상 골라주세요.",
+        confirmText: "확인",
+      });
+      return;
+    }
     setBusyCandidateId(candidateId);
     try {
       // ACCEPTED/MANUALLY_CORRECTED일 때만 confirmedMealSlots / dosage 함께 전송
@@ -641,11 +715,18 @@ function CandidateCard({
         </View>
       )}
 
-      {notRejected && (
+      {notRejected && (() => {
+        // 백엔드의 suggestedMealSlots 가 거의 항상 전 끼니 라서 의미가 없음 →
+        // extractedSchedule 의 빈도(N회) 로 의학적 관례 따라 다시 추론한 슬롯을 표시.
+        const aiSuggested = inferSuggestedSlots(
+          candidate.extractedSchedule,
+          candidate.suggestedMealSlots,
+        );
+        return (
         <View style={styles.slotPickerBox}>
           <AppText type="pretendard-b" style={styles.slotPickerTitle}>
             복용 시간대 선택
-            {(candidate.suggestedMealSlots?.length ?? 0) > 0 && (
+            {aiSuggested.length > 0 && (
               <AppText type="pretendard-r" style={styles.slotPickerHint}>
                 {"  "}AI 추천 표시됨
               </AppText>
@@ -654,9 +735,7 @@ function CandidateCard({
           <View style={styles.slotRow}>
             {SLOT_ORDER.map((slot) => {
               const on = selectedSlots.has(slot);
-              const suggested =
-                candidate.suggestedMealSlots?.includes(toServerSlot(slot)) ??
-                false;
+              const suggested = aiSuggested.includes(toServerSlot(slot));
               return (
                 <Pressable
                   key={slot}
@@ -691,7 +770,8 @@ function CandidateCard({
             })}
           </View>
         </View>
-      )}
+        );
+      })()}
 
       {decided === "PENDING" ? (
         <View style={styles.actionRow}>
@@ -729,6 +809,7 @@ function CandidateCard({
             style={({ pressed }) => [
               styles.actionBtn,
               styles.acceptBtn,
+              (busy || selectedSlots.size === 0) && styles.acceptBtnDisabled,
               pressed && { opacity: 0.85 },
             ]}
           >
@@ -1071,6 +1152,10 @@ const styles = StyleSheet.create({
   acceptBtn: {
     borderColor: "#5BC4AE",
     backgroundColor: "#5BC4AE",
+  },
+  acceptBtnDisabled: {
+    borderColor: "#D8D5C5",
+    backgroundColor: "#D8D5C5",
   },
   acceptText: {
     fontSize: 13,

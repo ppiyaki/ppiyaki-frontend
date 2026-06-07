@@ -4,11 +4,7 @@ import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
 import { getMe } from "@/services/auth";
 import { describeDaysOfWeek } from "@/services/days-of-week";
-import {
-  deleteMedicine,
-  getMedicine,
-  Medicine,
-} from "@/services/medicines";
+import { deleteMedicine, getMedicine, Medicine } from "@/services/medicines";
 import {
   createSchedule,
   deleteSchedule,
@@ -263,83 +259,111 @@ export default function MedicationDetailScreen() {
         </View>
 
         {/* 시간 추가 — 보호자만 */}
-        {canEdit && (
-        <View style={styles.section}>
-          <AppText type="pretendard-b" style={styles.sectionTitle}>
-            시간 추가하기
-          </AppText>
-          <View style={styles.addCard}>
-            <View style={styles.slotRow}>
-              {(["morning", "noon", "night"] as MealSlot[]).map((slot) => {
-                const on = newSlot === slot;
-                return (
-                  <Pressable
-                    key={slot}
-                    onPress={() => setNewSlot(slot)}
-                    style={[
-                      styles.slotBtn,
-                      on && {
-                        borderColor: SLOT_COLOR[slot],
-                        backgroundColor: SLOT_BG[slot],
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={SLOT_ICON[slot]}
-                      size={20}
-                      color={on ? SLOT_COLOR[slot] : "#BBB"}
-                    />
-                    <AppText
-                      type="pretendard-b"
+        {canEdit && (() => {
+          // 이미 등록된 슬롯 — 이중 등록 방지용
+          const existingSlots = new Set<MealSlot>(
+            schedules.map((s) =>
+              s.mealSlot === "BREAKFAST"
+                ? "morning"
+                : s.mealSlot === "LUNCH"
+                  ? "noon"
+                  : "night",
+            ),
+          );
+          const allTaken = existingSlots.size === 3;
+          return (
+          <View style={styles.section}>
+            <AppText type="pretendard-b" style={styles.sectionTitle}>
+              시간 추가하기
+            </AppText>
+            <View style={styles.addCard}>
+              {allTaken && (
+                <AppText type="pretendard-m" style={styles.allTakenHint}>
+                  아침·점심·저녁 모두 등록되어 있어요
+                </AppText>
+              )}
+              <View style={styles.slotRow}>
+                {(["morning", "noon", "night"] as MealSlot[]).map((slot) => {
+                  const on = newSlot === slot;
+                  const taken = existingSlots.has(slot);
+                  return (
+                    <Pressable
+                      key={slot}
+                      onPress={() => {
+                        if (taken) return;
+                        setNewSlot(slot);
+                      }}
+                      disabled={taken}
                       style={[
-                        styles.slotBtnText,
-                        on && { color: SLOT_COLOR[slot] },
+                        styles.slotBtn,
+                        on && {
+                          borderColor: SLOT_COLOR[slot],
+                          backgroundColor: SLOT_BG[slot],
+                        },
+                        taken && styles.slotBtnTaken,
                       ]}
                     >
-                      {SLOT_LABEL[slot]}
-                    </AppText>
-                    {meals && (
+                      <Ionicons
+                        name={SLOT_ICON[slot]}
+                        size={20}
+                        color={
+                          taken
+                            ? "#CCC"
+                            : on
+                              ? SLOT_COLOR[slot]
+                              : "#BBB"
+                        }
+                      />
                       <AppText
-                        type="pretendard-r"
-                        style={styles.slotBtnTime}
+                        type="pretendard-b"
+                        style={[
+                          styles.slotBtnText,
+                          on && { color: SLOT_COLOR[slot] },
+                          taken && { color: "#BBB" },
+                        ]}
                       >
-                        {meals[slot]}
+                        {SLOT_LABEL[slot]}
+                        {taken && (
+                          <AppText type="pretendard-r" style={styles.takenMark}>
+                            {" "}등록됨
+                          </AppText>
+                        )}
                       </AppText>
-                    )}
-                  </Pressable>
-                );
-              })}
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={styles.dosageRow}>
+                <AppText type="pretendard-b" style={styles.dosageLabel}>
+                  복용량
+                </AppText>
+                <TextInput
+                  value={newDosage}
+                  onChangeText={setNewDosage}
+                  placeholder="1정"
+                  placeholderTextColor="#BBB"
+                  style={styles.dosageInput}
+                  maxLength={20}
+                />
+              </View>
+              <Pressable
+                onPress={handleAddSchedule}
+                disabled={!newSlot || adding || allTaken}
+                style={({ pressed }) => [
+                  styles.addBtn,
+                  (!newSlot || adding || allTaken) && styles.addBtnDisabled,
+                  pressed && newSlot && !allTaken && { opacity: 0.85 },
+                ]}
+              >
+                <Ionicons name="add" size={20} color="#222" />
+                <AppText type="pretendard-b" style={styles.addBtnText}>
+                  {adding ? "추가 중..." : "시간 추가"}
+                </AppText>
+              </Pressable>
             </View>
-            <View style={styles.dosageRow}>
-              <AppText type="pretendard-b" style={styles.dosageLabel}>
-                복용량
-              </AppText>
-              <TextInput
-                value={newDosage}
-                onChangeText={setNewDosage}
-                placeholder="1정"
-                placeholderTextColor="#BBB"
-                style={styles.dosageInput}
-                maxLength={20}
-              />
-            </View>
-            <Pressable
-              onPress={handleAddSchedule}
-              disabled={!newSlot || adding}
-              style={({ pressed }) => [
-                styles.addBtn,
-                (!newSlot || adding) && styles.addBtnDisabled,
-                pressed && newSlot && { opacity: 0.85 },
-              ]}
-            >
-              <Ionicons name="add" size={20} color="#222" />
-              <AppText type="pretendard-b" style={styles.addBtnText}>
-                {adding ? "추가 중..." : "시간 추가"}
-              </AppText>
-            </Pressable>
           </View>
-        </View>
-        )}
+          );
+        })()}
 
         {/* 약 삭제 — 보호자만 */}
         {canEdit && (
@@ -541,6 +565,20 @@ const styles = StyleSheet.create({
   slotRow: {
     flexDirection: "row",
     gap: 8,
+  },
+  allTakenHint: {
+    fontSize: 13,
+    color: "#888",
+    textAlign: "center",
+    paddingVertical: 4,
+  },
+  slotBtnTaken: {
+    backgroundColor: "#F4F2EA",
+    opacity: 0.6,
+  },
+  takenMark: {
+    fontSize: 11,
+    color: "#BBB",
   },
   slotBtn: {
     flex: 1,
