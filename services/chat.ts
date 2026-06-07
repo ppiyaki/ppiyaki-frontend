@@ -112,15 +112,31 @@ function parseSseChunks(text: string, handlers: SseHandlers): boolean {
  *  - apiFetch 와 동일한 정책으로 1회 토큰 refresh + 재시도
  *  - 401 응답은 status === 4 이전에 본문/청크가 안 오므로 첫 시도에서 onChunk 가
  *    호출됐을 가능성이 없다 → 재시도 시 사용자 화면이 어긋날 위험 없음
+ *  - FormData body 는 한 번 send 한 뒤 재사용 시 RN 폴리필이 빈 본문을 보낼 수 있음
+ *    → body 를 factory(() => FormData) 로 받아 매 시도마다 새로 생성
  */
 type AttemptOutcome =
   | { kind: "done" }
   | { kind: "unauth"; body: string }
   | { kind: "error"; error: Error };
 
+interface SseInit {
+  method?: string;
+  headers?: Record<string, string>;
+  /** 매 시도마다 호출 — FormData 같은 일회성 body 안전 재전송 보장 */
+  body?: () => XMLHttpRequestBodyInit | null;
+}
+
+/** 진단용 — 토큰 앞 4 + 뒤 4 + 길이 (전체 노출 금지) */
+function tokenSummary(t: string | null): string {
+  if (!t) return "none";
+  if (t.length < 12) return `len${t.length}`;
+  return `${t.slice(0, 4)}…${t.slice(-4)}(len${t.length})`;
+}
+
 function runSseAttempt(
   path: string,
-  init: RequestInit,
+  init: SseInit,
   handlers: SseHandlers,
   token: string | null,
 ): Promise<AttemptOutcome> {
@@ -129,8 +145,7 @@ function runSseAttempt(
     xhr.open(init.method ?? "GET", `${API_BASE}${path}`);
 
     // 헤더 적용 — multipart/form-data 의 Content-Type 은 RN 이 자동 설정하므로 그대로 둠.
-    const initHeaders =
-      (init.headers as Record<string, string> | undefined) ?? {};
+    const initHeaders = init.headers ?? {};
     for (const [k, v] of Object.entries(initHeaders)) {
       try {
         xhr.setRequestHeader(k, v);
@@ -217,7 +232,9 @@ function runSseAttempt(
     };
 
     try {
-      xhr.send((init.body as XMLHttpRequestBodyInit | null) ?? null);
+      // body factory 매 시도마다 호출 → fresh FormData/string 생성
+      const body = init.body ? init.body() : null;
+      xhr.send(body ?? null);
     } catch (e) {
       if (__DEV__) console.log("[sse] xhr.send threw:", e);
       finish({
@@ -228,42 +245,79 @@ function runSseAttempt(
   });
 }
 
+/**
+ * 401 → refresh → 1회 재시도. 재시도 시 streamSse 자체를 다시 호출해서
+ * 함수 최상단 getAccessToken() 이 한 번 더 실행되도록 한다. 그래야 클로저에
+ * 캡처된 옛 토큰을 재사용할 여지 자체가 없어진다.
+ */
 async function streamSse(
   path: string,
-  init: RequestInit,
+  init: SseInit,
   handlers: SseHandlers,
+  retried = false,
+  prevTokenSummary?: string,
 ): Promise<void> {
+  const token = await getAccessToken();
   if (__DEV__) {
-    console.log("[sse] →", path, "method=", init.method ?? "GET");
+    console.log(
+      "[sse] →",
+      path,
+      "method=",
+      init.method ?? "GET",
+      "retried=",
+      retried,
+      "token=",
+      tokenSummary(token),
+    );
+    if (retried && prevTokenSummary && tokenSummary(token) === prevTokenSummary) {
+      console.log(
+        "[sse] WARN: token unchanged after refresh — SecureStore may be stale",
+      );
+    }
   }
 
-  let token = await getAccessToken();
-  let outcome = await runSseAttempt(path, init, handlers, token);
+  const outcome = await runSseAttempt(path, init, handlers, token);
 
-  // 401 → refresh 1회 + 재시도. 이 시점에 handlers.onChunk 는 호출된 적 없음(401 응답은
-  // SSE 청크가 흐르기 전에 끝나므로) → 사용자 말풍선/UI 가 어긋날 일이 없다.
-  if (outcome.kind === "unauth") {
+  if (outcome.kind === "unauth" && !retried) {
     if (__DEV__) console.log("[sse] 401 → refresh & retry");
     try {
       await refreshAccessToken();
+      if (__DEV__) console.log("[sse] refresh ok");
     } catch (e) {
+      if (__DEV__) console.log("[sse] refresh failed:", e);
       handlers.onError?.(
         e instanceof Error ? e : new Error("인증이 만료되었습니다"),
       );
       return;
     }
-    token = await getAccessToken();
-    outcome = await runSseAttempt(path, init, handlers, token);
+    return streamSse(path, init, handlers, true, tokenSummary(token));
   }
 
   if (outcome.kind === "done") {
     handlers.onDone?.();
   } else if (outcome.kind === "unauth") {
-    // refresh 후에도 401 → 토큰 진짜 만료 / 권한 문제
+    if (__DEV__) {
+      const bodyPreview = outcome.body?.slice(0, 200);
+      console.log(
+        "[sse] 2nd attempt also 401 — backend rejected new token. body:",
+        bodyPreview,
+      );
+    }
     handlers.onError?.(new Error("인증이 만료되었습니다. 다시 로그인해주세요."));
   } else {
     handlers.onError?.(outcome.error);
   }
+}
+
+function makeVoiceForm(fileUri: string, language: string): FormData {
+  const form = new FormData();
+  form.append("file", {
+    uri: fileUri,
+    name: "audio.m4a",
+    type: "audio/mp4",
+  } as unknown as Blob);
+  form.append("language", language);
+  return form;
 }
 
 /** 단발 텍스트 대화 (세션 없이) — SSE 스트리밍 */
@@ -276,7 +330,7 @@ export function streamQuickTextMessage(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: () => JSON.stringify({ message }),
     },
     handlers,
   );
@@ -293,7 +347,7 @@ export function streamSessionTextMessage(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: () => JSON.stringify({ message }),
     },
     handlers,
   );
@@ -305,16 +359,9 @@ export function streamQuickVoiceMessage(
   handlers: SseHandlers,
   language = "ko",
 ): Promise<void> {
-  const form = new FormData();
-  form.append("file", {
-    uri: fileUri,
-    name: "audio.m4a",
-    type: "audio/mp4",
-  } as unknown as Blob);
-  form.append("language", language);
   return streamSse(
     "/api/v1/chat/voice-messages",
-    { method: "POST", body: form },
+    { method: "POST", body: () => makeVoiceForm(fileUri, language) },
     handlers,
   );
 }
@@ -326,16 +373,9 @@ export function streamSessionVoiceMessage(
   handlers: SseHandlers,
   language = "ko",
 ): Promise<void> {
-  const form = new FormData();
-  form.append("file", {
-    uri: fileUri,
-    name: "audio.m4a",
-    type: "audio/mp4",
-  } as unknown as Blob);
-  form.append("language", language);
   return streamSse(
     `/api/v1/chat/sessions/${sessionId}/voice-messages`,
-    { method: "POST", body: form },
+    { method: "POST", body: () => makeVoiceForm(fileUri, language) },
     handlers,
   );
 }
@@ -380,7 +420,7 @@ export function streamQuickPhotoMessage(
 ): Promise<void> {
   return streamSse(
     "/api/v1/chat/photo-messages",
-    { method: "POST", body: buildPhotoForm(photo, message) },
+    { method: "POST", body: () => buildPhotoForm(photo, message) },
     handlers,
   );
 }
@@ -394,7 +434,7 @@ export function streamSessionPhotoMessage(
 ): Promise<void> {
   return streamSse(
     `/api/v1/chat/sessions/${sessionId}/photo-messages`,
-    { method: "POST", body: buildPhotoForm(photo, message) },
+    { method: "POST", body: () => buildPhotoForm(photo, message) },
     handlers,
   );
 }

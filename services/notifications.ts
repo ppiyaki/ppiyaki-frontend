@@ -36,6 +36,12 @@ export interface NotificationItem {
    * 다른 카테고리는 항상 null.
    */
   takenAt: string | null;
+  /**
+   * 복약 끼니 슬롯. BREAKFAST / LUNCH / DINNER.
+   * MEDICATION_REMINDER · MEDICATION_DELAY 에만 값이 있고 그 외 카테고리는 null.
+   * 백엔드 #455 (2026-06-07) 로 추가. 프론트는 시각 추론하지 말고 이 값을 그대로 인증 슬롯으로 사용.
+   */
+  mealSlot: "BREAKFAST" | "LUNCH" | "DINNER" | null;
   createdAt: string;
 }
 

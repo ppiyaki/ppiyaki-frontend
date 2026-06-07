@@ -92,15 +92,20 @@ function pickActiveSlot(
 export default function DoseConfirmIntroScreen() {
   const router = useRouter();
   const confirm = useConfirm();
-  const { scheduleId: paramScheduleId, targetDate: paramTargetDate } =
-    useLocalSearchParams<{
-      scheduleId?: string;
-      targetDate?: string;
-    }>();
+  const {
+    scheduleId: paramScheduleId,
+    targetDate: paramTargetDate,
+    mealSlot: paramMealSlot,
+  } = useLocalSearchParams<{
+    scheduleId?: string;
+    targetDate?: string;
+    mealSlot?: string;
+  }>();
   if (__DEV__) {
     console.log("[dose-confirm/intro] params:", {
       paramScheduleId,
       paramTargetDate,
+      paramMealSlot,
     });
   }
   const [resolvedScheduleId, setResolvedScheduleId] = useState<string | null>(
@@ -123,32 +128,50 @@ export default function DoseConfirmIntroScreen() {
     })();
   }, []);
 
-  // scheduleId 가 안 넘어왔으면 현재 시각 기준으로 추론
+  // scheduleId 가 안 넘어왔으면 슬롯 정보로 매칭 후 첫 schedule 사용.
+  // 1순위: 알림 payload 의 mealSlot (BREAKFAST/LUNCH/DINNER) — 정확
+  // 2순위: 현재 시각 기준 추론 (홈에서 직접 인증 진입한 경우)
   useEffect(() => {
     if (paramScheduleId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const [meds, meals] = await Promise.all([
-          listMedicines(),
-          getMealTimes(),
-        ]);
-        const mealMinutes: Record<MealSlot, number> = {
-          morning: toMinutes(meals.morning),
-          noon: toMinutes(meals.noon),
-          night: toMinutes(meals.night),
-        };
-        const now = new Date();
-        const nowMin = now.getHours() * 60 + now.getMinutes();
-        const targetSlot: MealSlot = pickActiveSlot(mealMinutes, nowMin);
-        const serverSlot: ServerMealSlot =
-          targetSlot === "morning"
-            ? "BREAKFAST"
-            : targetSlot === "noon"
-              ? "LUNCH"
-              : "DINNER";
+        let serverSlot: ServerMealSlot | null = null;
 
-        // 약별 schedule 조회 → 현재 슬롯에 해당하는 첫 schedule 사용
+        if (
+          paramMealSlot === "BREAKFAST" ||
+          paramMealSlot === "LUNCH" ||
+          paramMealSlot === "DINNER"
+        ) {
+          // 알림에서 mealSlot 받아온 케이스 — 정확하므로 mealTimes 안 봐도 됨
+          serverSlot = paramMealSlot;
+          if (__DEV__) {
+            console.log("[dose-confirm/intro] using mealSlot from payload:", serverSlot);
+          }
+        } else {
+          // 홈에서 직접 진입한 케이스 — 현재 시각 기준 추론
+          const meals = await getMealTimes();
+          const mealMinutes: Record<MealSlot, number> = {
+            morning: toMinutes(meals.morning),
+            noon: toMinutes(meals.noon),
+            night: toMinutes(meals.night),
+          };
+          const now = new Date();
+          const nowMin = now.getHours() * 60 + now.getMinutes();
+          const targetSlot: MealSlot = pickActiveSlot(mealMinutes, nowMin);
+          serverSlot =
+            targetSlot === "morning"
+              ? "BREAKFAST"
+              : targetSlot === "noon"
+                ? "LUNCH"
+                : "DINNER";
+          if (__DEV__) {
+            console.log("[dose-confirm/intro] inferred slot from now:", serverSlot);
+          }
+        }
+
+        const meds = await listMedicines();
+        // 약별 schedule 조회 → 결정된 슬롯에 해당하는 첫 schedule 사용
         for (const m of meds.responses) {
           const s = await listSchedules(m.id);
           const match = s.responses.find((x) => x.mealSlot === serverSlot);
@@ -178,7 +201,7 @@ export default function DoseConfirmIntroScreen() {
     return () => {
       cancelled = true;
     };
-  }, [paramScheduleId]);
+  }, [paramScheduleId, paramMealSlot]);
 
   const scheduleId = resolvedScheduleId;
   const targetDate = paramTargetDate ?? todayIso();

@@ -370,14 +370,17 @@ function NotifCard({
       {showConfirm ? (
         <Pressable
           onPress={() => {
+            // mealSlot 은 item 최상위 필드 — payload 가 아님 (백엔드 #455 스펙)
             const { scheduleId, targetDate } = parseReminderPayload(
               item.payload,
             );
+            const mealSlot = item.mealSlot;
             router.push({
               pathname: "/dose-confirm/intro" as any,
               params: {
                 ...(scheduleId ? { scheduleId: String(scheduleId) } : {}),
                 ...(targetDate ? { targetDate } : {}),
+                ...(mealSlot ? { mealSlot } : {}),
               },
             });
           }}
@@ -416,6 +419,8 @@ function parseReminderPayload(payload: string | null): {
   scheduleId?: number;
   targetDate?: string;
 } {
+  // 백엔드 #455 (2026-06-07) 이후 payload 는 항상 null. mealSlot 은 item.mealSlot 으로
+  // 옮겨감. scheduleIds/targetDate 는 구버전 호환 유지용.
   if (!payload) {
     if (__DEV__) console.log("[reminder] payload is null");
     return {};
@@ -450,7 +455,10 @@ function parseReminderPayload(payload: string | null): {
     }
 
     if (__DEV__) {
-      console.log("[reminder] extracted:", { scheduleId: firstId, targetDate: td });
+      console.log("[reminder] extracted:", {
+        scheduleId: firstId,
+        targetDate: td,
+      });
     }
 
     return {

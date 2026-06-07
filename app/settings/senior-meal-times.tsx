@@ -3,11 +3,13 @@ import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
 import { LinkedSenior, listLinkedSeniors } from "@/services/caregivers";
+import { getDashboardDaily } from "@/services/dashboard";
 import {
   DEFAULT_MEAL_TIMES,
   MealSlot,
   MealTimes,
   setSeniorMealTimes,
+  validateMealTimeChange,
 } from "@/services/user-settings";
 import { resolveProfileImage } from "@/utils/profile-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -80,6 +82,7 @@ export default function SeniorMealTimesScreen() {
   const [times, setTimes] = useState<MealTimes>(DEFAULT_MEAL_TIMES);
   const [initial, setInitial] = useState<MealTimes>(DEFAULT_MEAL_TIMES);
   const [loadingList, setLoadingList] = useState(true);
+  const [loadingTimes, setLoadingTimes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -99,11 +102,48 @@ export default function SeniorMealTimesScreen() {
     })();
   }, []);
 
-  // 시니어 변경 시 폼 리셋 (서버에서 현재 시간을 가져올 GET이 없어 기본값으로 시작)
+  // 시니어 변경 시 그 시니어의 현재 mealTimes 를 dashboard 응답에서 추출해 폼 prefill.
+  // (전용 GET 엔드포인트가 없어서 daily dashboard 의 slot.mealTime 을 활용.)
+  // 실패하면 기본값으로 폴백 — 그래도 보호자에게 안내 배너 노출.
   useEffect(() => {
     if (selectedId == null) return;
-    setTimes(DEFAULT_MEAL_TIMES);
-    setInitial(DEFAULT_MEAL_TIMES);
+    let cancelled = false;
+    setLoadingTimes(true);
+    void (async () => {
+      try {
+        const today = new Date();
+        const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        const res = await getDashboardDaily(selectedId, iso);
+        const fromSlot = (
+          slot: "BREAKFAST" | "LUNCH" | "DINNER",
+        ): string | null => {
+          const m = res.slots.find((s) => s.slot === slot)?.mealTime;
+          return m ? m.slice(0, 5) : null;
+        };
+        const morning = fromSlot("BREAKFAST");
+        const noon = fromSlot("LUNCH");
+        const night = fromSlot("DINNER");
+        if (cancelled) return;
+        const next: MealTimes = {
+          morning: morning ?? DEFAULT_MEAL_TIMES.morning,
+          noon: noon ?? DEFAULT_MEAL_TIMES.noon,
+          night: night ?? DEFAULT_MEAL_TIMES.night,
+        };
+        setTimes(next);
+        setInitial(next);
+      } catch (e) {
+        console.log("[senior-meal-times] dashboard fetch failed:", e);
+        if (!cancelled) {
+          setTimes(DEFAULT_MEAL_TIMES);
+          setInitial(DEFAULT_MEAL_TIMES);
+        }
+      } finally {
+        if (!cancelled) setLoadingTimes(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedId]);
 
   const dirty =
@@ -217,14 +257,21 @@ export default function SeniorMealTimesScreen() {
               자동으로 맞춰드릴게요
             </AppText>
 
-            {(["morning", "noon", "night"] as MealSlot[]).map((slot) => (
-              <SlotPicker
-                key={slot}
-                slot={slot}
-                value={times[slot]}
-                onChange={(v) => setTimes((t) => ({ ...t, [slot]: v }))}
-              />
-            ))}
+            {loadingTimes ? (
+              <View style={{ paddingVertical: 32, alignItems: "center" }}>
+                <ActivityIndicator size="small" color="#FFD24D" />
+              </View>
+            ) : (
+              (["morning", "noon", "night"] as MealSlot[]).map((slot) => (
+                <SlotPicker
+                  key={slot}
+                  slot={slot}
+                  value={times[slot]}
+                  allTimes={times}
+                  onChange={(v) => setTimes((t) => ({ ...t, [slot]: v }))}
+                />
+              ))
+            )}
           </ScrollView>
 
           <View style={styles.footer}>
@@ -258,15 +305,18 @@ export default function SeniorMealTimesScreen() {
 function SlotPicker({
   slot,
   value,
+  allTimes,
   onChange,
 }: {
   slot: MealSlot;
   value: string;
+  allTimes: MealTimes;
   onChange: (v: string) => void;
 }) {
   const meta = SLOT_META[slot];
   const scrollRef = useRef<ScrollView>(null);
   const [editing, setEditing] = useState(false);
+  const [chipError, setChipError] = useState<string | null>(null);
 
   useEffect(() => {
     const idx = meta.options.indexOf(value);
@@ -277,6 +327,16 @@ function SlotPicker({
       animated: true,
     });
   }, [value, meta.options]);
+
+  const tryApplyChip = (opt: string) => {
+    const result = validateMealTimeChange(slot, opt, allTimes);
+    if (!result.valid) {
+      setChipError(result.reason);
+      return;
+    }
+    setChipError(null);
+    onChange(opt);
+  };
 
   return (
     <View style={styles.slotCard}>
@@ -313,7 +373,7 @@ function SlotPicker({
           return (
             <Pressable
               key={opt}
-              onPress={() => onChange(opt)}
+              onPress={() => tryApplyChip(opt)}
               style={[
                 styles.chip,
                 on && {
@@ -333,9 +393,17 @@ function SlotPicker({
         })}
       </ScrollView>
 
+      {chipError && (
+        <AppText type="pretendard-m" style={styles.slotError}>
+          {chipError}
+        </AppText>
+      )}
+
       <TimeEditModal
         visible={editing}
         label={meta.label}
+        slot={slot}
+        allTimes={allTimes}
         accentColor={meta.color}
         accentBg={meta.bg}
         initial={value}
@@ -352,6 +420,8 @@ function SlotPicker({
 function TimeEditModal({
   visible,
   label,
+  slot,
+  allTimes,
   accentColor,
   accentBg,
   initial,
@@ -360,6 +430,8 @@ function TimeEditModal({
 }: {
   visible: boolean;
   label: string;
+  slot: MealSlot;
+  allTimes: MealTimes;
   accentColor: string;
   accentBg: string;
   initial: string;
@@ -379,7 +451,7 @@ function TimeEditModal({
 
   const hourNum = parseInt(hour, 10);
   const minuteNum = parseInt(minute, 10);
-  const valid =
+  const formatValid =
     !isNaN(hourNum) &&
     hourNum >= 0 &&
     hourNum <= 23 &&
@@ -387,11 +459,24 @@ function TimeEditModal({
     minuteNum >= 0 &&
     minuteNum <= 59;
 
+  const candidate = formatValid
+    ? `${String(hourNum).padStart(2, "0")}:${String(minuteNum).padStart(2, "0")}`
+    : null;
+  const orderCheck = candidate
+    ? validateMealTimeChange(slot, candidate, allTimes)
+    : null;
+  const valid = formatValid && orderCheck?.valid === true;
+  const errorMsg = !formatValid
+    ? hour.length === 0 && minute.length === 0
+      ? null
+      : "시: 0~23, 분: 0~59 로 입력해주세요"
+    : orderCheck && orderCheck.valid === false
+      ? orderCheck.reason
+      : null;
+
   const handleSave = () => {
-    if (!valid) return;
-    const hh = String(hourNum).padStart(2, "0");
-    const mm = String(minuteNum).padStart(2, "0");
-    onSave(`${hh}:${mm}`);
+    if (!valid || !candidate) return;
+    onSave(candidate);
   };
 
   return (
@@ -439,6 +524,12 @@ function TimeEditModal({
               style={[styles.modalInput, { borderColor: accentColor }]}
             />
           </View>
+
+          {errorMsg && (
+            <AppText type="pretendard-m" style={styles.modalError}>
+              {errorMsg}
+            </AppText>
+          )}
 
           <View style={styles.modalActions}>
             <Pressable
@@ -684,6 +775,17 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 15,
     color: "#888",
+  },
+  slotError: {
+    fontSize: 12,
+    color: "#E14B4B",
+    paddingHorizontal: 4,
+  },
+  modalError: {
+    fontSize: 13,
+    color: "#E14B4B",
+    textAlign: "center",
+    marginTop: -2,
   },
 
   footer: {

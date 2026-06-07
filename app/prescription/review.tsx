@@ -20,7 +20,7 @@ import {
 } from "@/services/user-settings";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -79,8 +79,6 @@ export default function PrescriptionReviewScreen() {
   const [amountMap, setAmountMap] = useState<AmountMap>({});
   /** candidate별 dosage 입력값 (OCR 누락분 보강용) */
   const [dosageMap, setDosageMap] = useState<Record<number, string>>({});
-  /** 이미 자동 ACCEPT 처리한 candidate id — 중복 호출 방지 */
-  const autoAcceptedRef = useRef<Set<number>>(new Set());
 
   const load = useCallback(async () => {
     if (!prescriptionId) return;
@@ -141,50 +139,10 @@ export default function PrescriptionReviewScreen() {
     });
   }, [detail]);
 
-  // EXACT 매칭 + dosage 추출 성공한 후보는 보호자 검토 없이 자동 ACCEPT 처리
-  useEffect(() => {
-    if (!detail || !prescriptionId) return;
-    const targets = detail.candidates.filter(
-      (c) =>
-        c.caregiverDecision === "PENDING" &&
-        c.matchType === "EXACT" &&
-        !!c.extractedDosage?.trim() &&
-        !autoAcceptedRef.current.has(c.id),
-    );
-    if (targets.length === 0) return;
-    for (const c of targets) autoAcceptedRef.current.add(c.id);
-    void (async () => {
-      for (const c of targets) {
-        const confirmedMealSlots = (c.suggestedMealSlots ?? []).slice();
-        try {
-          await decideCandidate(prescriptionId, c.id, "ACCEPTED", {
-            confirmedMealSlots,
-            dosage: c.extractedDosage,
-          });
-          setDetail((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  candidates: prev.candidates.map((x) =>
-                    x.id === c.id
-                      ? {
-                          ...x,
-                          caregiverDecision: "ACCEPTED",
-                          confirmedMealSlots,
-                        }
-                      : x,
-                  ),
-                }
-              : prev,
-          );
-        } catch (e) {
-          // 자동 처리 실패 시 사용자가 직접 결정하도록 락만 풀어줌
-          console.log("[prescription] auto-accept failed:", c.id, e);
-          autoAcceptedRef.current.delete(c.id);
-        }
-      }
-    })();
-  }, [detail, prescriptionId]);
+  // EXACT 매칭이라도 자동 ACCEPT 하지 않는다.
+  // 백엔드가 제안한 suggestedMealSlots 가 "전 끼니" 인 경우가 많은데, 시니어가 점심만
+  // 드시는 식이면 그대로 등록되어 잘못된 schedule 이 생성됨. 보호자가 시간대를 확인
+  // 후 직접 수락하도록 한다 (slot/ dosage 는 이미 effect 에서 pre-fill 됨 → 보통 1탭).
 
   const updateDosage = (candidateId: number, value: string) => {
     setDosageMap((prev) => ({ ...prev, [candidateId]: value }));

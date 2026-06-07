@@ -51,11 +51,20 @@ export function useNotificationDeepLink() {
           const scheduleId = parseScheduleIdFromFcm(data);
           const targetDate =
             typeof data.targetDate === "string" ? data.targetDate : undefined;
+          // 백엔드 #455: 푸시 data 에도 mealSlot 동봉됨
+          const rawMealSlot = data.mealSlot;
+          const mealSlot =
+            rawMealSlot === "BREAKFAST" ||
+            rawMealSlot === "LUNCH" ||
+            rawMealSlot === "DINNER"
+              ? rawMealSlot
+              : undefined;
           router.push({
             pathname: "/dose-confirm/intro" as any,
             params: {
               ...(scheduleId != null ? { scheduleId: String(scheduleId) } : {}),
               ...(targetDate ? { targetDate } : {}),
+              ...(mealSlot ? { mealSlot } : {}),
             },
           });
           break;

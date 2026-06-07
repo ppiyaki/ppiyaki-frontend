@@ -8,6 +8,7 @@ import {
   MealSlot,
   MealTimes,
   setMealTimes,
+  validateMealTimeChange,
 } from "@/services/user-settings";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -163,6 +164,7 @@ export default function MealTimesScreen() {
                 key={slot}
                 slot={slot}
                 value={times[slot]}
+                allTimes={times}
                 onChange={(v) => setTimes((t) => ({ ...t, [slot]: v }))}
               />
             ))}
@@ -195,15 +197,18 @@ export default function MealTimesScreen() {
 function SlotPicker({
   slot,
   value,
+  allTimes,
   onChange,
 }: {
   slot: MealSlot;
   value: string;
+  allTimes: MealTimes;
   onChange: (v: string) => void;
 }) {
   const meta = SLOT_META[slot];
   const scrollRef = useRef<ScrollView>(null);
   const [editing, setEditing] = useState(false);
+  const [chipError, setChipError] = useState<string | null>(null);
 
   // 선택 변경 시 가운데로 자동 스크롤
   useEffect(() => {
@@ -215,6 +220,17 @@ function SlotPicker({
       animated: true,
     });
   }, [value, meta.options]);
+
+  // 칩 탭 — 다른 슬롯과의 순서/간격 검증 후 적용
+  const tryApplyChip = (opt: string) => {
+    const result = validateMealTimeChange(slot, opt, allTimes);
+    if (!result.valid) {
+      setChipError(result.reason);
+      return;
+    }
+    setChipError(null);
+    onChange(opt);
+  };
 
   return (
     <View style={styles.slotCard}>
@@ -251,7 +267,7 @@ function SlotPicker({
           return (
             <Pressable
               key={opt}
-              onPress={() => onChange(opt)}
+              onPress={() => tryApplyChip(opt)}
               style={[
                 styles.chip,
                 on && {
@@ -271,9 +287,17 @@ function SlotPicker({
         })}
       </ScrollView>
 
+      {chipError && (
+        <AppText type="pretendard-m" style={styles.slotError}>
+          {chipError}
+        </AppText>
+      )}
+
       <TimeEditModal
         visible={editing}
         label={meta.label}
+        slot={slot}
+        allTimes={allTimes}
         accentColor={meta.color}
         accentBg={meta.bg}
         initial={value}
@@ -291,6 +315,8 @@ function SlotPicker({
 function TimeEditModal({
   visible,
   label,
+  slot,
+  allTimes,
   accentColor,
   accentBg,
   initial,
@@ -299,6 +325,8 @@ function TimeEditModal({
 }: {
   visible: boolean;
   label: string;
+  slot: MealSlot;
+  allTimes: MealTimes;
   accentColor: string;
   accentBg: string;
   initial: string;
@@ -319,7 +347,7 @@ function TimeEditModal({
 
   const hourNum = parseInt(hour, 10);
   const minuteNum = parseInt(minute, 10);
-  const valid =
+  const formatValid =
     !isNaN(hourNum) &&
     hourNum >= 0 &&
     hourNum <= 23 &&
@@ -327,11 +355,25 @@ function TimeEditModal({
     minuteNum >= 0 &&
     minuteNum <= 59;
 
+  // 포맷이 유효할 때만 슬롯 순서/간격 검증 수행
+  const candidate = formatValid
+    ? `${String(hourNum).padStart(2, "0")}:${String(minuteNum).padStart(2, "0")}`
+    : null;
+  const orderCheck = candidate
+    ? validateMealTimeChange(slot, candidate, allTimes)
+    : null;
+  const valid = formatValid && orderCheck?.valid === true;
+  const errorMsg = !formatValid
+    ? hour.length === 0 && minute.length === 0
+      ? null // 입력 전 — 안내 없음
+      : "시: 0~23, 분: 0~59 로 입력해주세요"
+    : orderCheck && orderCheck.valid === false
+      ? orderCheck.reason
+      : null;
+
   const handleSave = () => {
-    if (!valid) return;
-    const hh = String(hourNum).padStart(2, "0");
-    const mm = String(minuteNum).padStart(2, "0");
-    onSave(`${hh}:${mm}`);
+    if (!valid || !candidate) return;
+    onSave(candidate);
   };
 
   return (
@@ -379,6 +421,12 @@ function TimeEditModal({
               style={[styles.modalInput, { borderColor: accentColor }]}
             />
           </View>
+
+          {errorMsg && (
+            <AppText type="pretendard-m" style={styles.modalError}>
+              {errorMsg}
+            </AppText>
+          )}
 
           <View style={styles.modalActions}>
             <Pressable
@@ -568,6 +616,17 @@ const styles = StyleSheet.create({
   chipRow: {
     paddingHorizontal: 4,
     gap: 8,
+  },
+  slotError: {
+    fontSize: 12,
+    color: "#E14B4B",
+    paddingHorizontal: 4,
+  },
+  modalError: {
+    fontSize: 13,
+    color: "#E14B4B",
+    textAlign: "center",
+    marginTop: -2,
   },
   chip: {
     paddingHorizontal: 16,

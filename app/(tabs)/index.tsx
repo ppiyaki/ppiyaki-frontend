@@ -4,8 +4,14 @@ import { useExitOnBack } from "@/hooks/use-exit-on-back";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
 import { getMe } from "@/services/auth";
+import {
+  DailyDashboard,
+  SlotStatus,
+  getDashboardDaily,
+} from "@/services/dashboard";
 import { listNotifications } from "@/services/notifications";
 import { PetMe, getMyPet } from "@/services/pets";
+import { ServerMealSlot } from "@/services/user-settings";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -62,6 +68,11 @@ const MENU_ITEMS: MenuItem[] = [
   },
 ];
 
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   useRequireAuth();
@@ -69,6 +80,7 @@ export default function HomeScreen() {
   const [nickname, setNickname] = useState<string>("");
   const [pet, setPet] = useState<PetMe | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
+  const [daily, setDaily] = useState<DailyDashboard | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -99,6 +111,16 @@ export default function HomeScreen() {
         setHasUnread(
           notifRes ? notifRes.responses.some((n) => !n.isRead) : false,
         );
+
+        // 시니어 본인의 오늘 복약 현황 — daily dashboard 를 자기 id 로 호출
+        if (me?.id != null) {
+          try {
+            const res = await getDashboardDaily(me.id, todayIso());
+            if (!cancelled) setDaily(res);
+          } catch (e) {
+            console.log("[home] daily fetch failed:", e);
+          }
+        }
       })();
       return () => {
         cancelled = true;
@@ -142,6 +164,19 @@ export default function HomeScreen() {
           {hasUnread && <View style={styles.notifDot} />}
         </Pressable>
       </View>
+
+      {/* 오늘 복약 현황 — 헤더 아래 가로 배치. 탭하면 알림함으로 */}
+      <Pressable
+        onPress={() => router.push("/notifications" as any)}
+        style={({ pressed }) => [
+          styles.todayRow,
+          pressed && { opacity: 0.8 },
+        ]}
+      >
+        <TodayChip slot="BREAKFAST" daily={daily} />
+        <TodayChip slot="LUNCH" daily={daily} />
+        <TodayChip slot="DINNER" daily={daily} />
+      </Pressable>
 
       {/* 캐릭터 영역 */}
       <View style={styles.characterSection}>
@@ -208,6 +243,61 @@ export default function HomeScreen() {
         ))}
       </View>
     </SafeAreaView>
+  );
+}
+
+const SLOT_META: Record<
+  ServerMealSlot,
+  { icon: keyof typeof Ionicons.glyphMap; label: string }
+> = {
+  BREAKFAST: { icon: "sunny", label: "아침" },
+  LUNCH: { icon: "restaurant", label: "점심" },
+  DINNER: { icon: "moon", label: "저녁" },
+};
+
+function TodayChip({
+  slot,
+  daily,
+}: {
+  slot: ServerMealSlot;
+  daily: DailyDashboard | null;
+}) {
+  const status: SlotStatus =
+    daily?.slots.find((s) => s.slot === slot)?.status ?? "NOT_SCHEDULED";
+
+  // 상태별 색상 + 배지 아이콘
+  let iconColor = "#BBB"; // 기본(PENDING/NOT_SCHEDULED)
+  let badgeColor: string | null = null;
+  let badgeIcon: keyof typeof Ionicons.glyphMap = "checkmark";
+  if (status === "PERFECT") {
+    iconColor = "#5BC4AE";
+    badgeColor = "#5BC4AE";
+    badgeIcon = "checkmark";
+  } else if (status === "DELAYED") {
+    iconColor = "#F8B835";
+    badgeColor = "#F8B835";
+    badgeIcon = "time";
+  } else if (status === "MISSED") {
+    iconColor = "#E14B4B";
+    badgeColor = "#E14B4B";
+    badgeIcon = "close";
+  }
+
+  const meta = SLOT_META[slot];
+  return (
+    <View style={styles.todayChip}>
+      <View style={styles.todayIconWrap}>
+        <Ionicons name={meta.icon} size={20} color={iconColor} />
+        {badgeColor && (
+          <View style={[styles.todayBadge, { backgroundColor: badgeColor }]}>
+            <Ionicons name={badgeIcon} size={10} color="#FFF" />
+          </View>
+        )}
+      </View>
+      <AppText type="pretendard-m" style={styles.todayLabel}>
+        {meta.label}
+      </AppText>
+    </View>
   );
 }
 
@@ -345,6 +435,48 @@ const styles = StyleSheet.create({
   bubbleText: {
     fontSize: 18,
     color: "#5A4500",
+  },
+
+  /* ── 오늘 복약 상태 (헤더 아래 가로 배치) ── */
+  todayRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 28,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  todayChip: {
+    alignItems: "center",
+    gap: 4,
+    minWidth: 48,
+  },
+  todayIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  todayBadge: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#FDFCF3",
+  },
+  todayLabel: {
+    fontSize: 12,
+    color: "#666",
   },
 
   /* ── 사용자 정보 카드 ── */

@@ -167,3 +167,75 @@ export function timeToSlot(time: string, meals: MealTimes): MealSlot {
 export function slotToTime(slot: MealSlot, meals: MealTimes): string {
   return `${meals[slot]}:00`;
 }
+
+/** 슬롯 간 최소 간격 — grace(60분)의 2배. 슬롯 추론·인증 윈도우가 겹치지 않게. */
+export const MIN_SLOT_GAP_MIN = 120;
+
+const SLOT_LABEL: Record<MealSlot, string> = {
+  morning: "아침",
+  noon: "점심",
+  night: "저녁",
+};
+
+/**
+ * 특정 슬롯에 후보 시각을 적용해도 되는지 검증.
+ * - morning < noon < night 순서 보장
+ * - 각 슬롯 간 최소 MIN_SLOT_GAP_MIN 분 간격 보장
+ *
+ * 검증 실패 시 안내 문구 반환.
+ */
+export function validateMealTimeChange(
+  slot: MealSlot,
+  candidateHhmm: string,
+  current: MealTimes,
+): { valid: true } | { valid: false; reason: string } {
+  const cand = parseTimeToMinutes(candidateHhmm);
+  const next: Record<MealSlot, number> = {
+    morning: parseTimeToMinutes(current.morning),
+    noon: parseTimeToMinutes(current.noon),
+    night: parseTimeToMinutes(current.night),
+  };
+  next[slot] = cand;
+
+  // 순서: morning < noon < night
+  if (!(next.morning < next.noon)) {
+    if (slot === "morning") {
+      return {
+        valid: false,
+        reason: `점심(${current.noon})보다 이전 시각이어야 해요`,
+      };
+    }
+    return {
+      valid: false,
+      reason: `아침(${current.morning})보다 이후 시각이어야 해요`,
+    };
+  }
+  if (!(next.noon < next.night)) {
+    if (slot === "noon") {
+      return {
+        valid: false,
+        reason: `저녁(${current.night})보다 이전 시각이어야 해요`,
+      };
+    }
+    return {
+      valid: false,
+      reason: `점심(${current.noon})보다 이후 시각이어야 해요`,
+    };
+  }
+
+  // 최소 간격: 인접 슬롯 간 2시간 이상
+  const gaps: { a: MealSlot; b: MealSlot; gap: number }[] = [
+    { a: "morning", b: "noon", gap: next.noon - next.morning },
+    { a: "noon", b: "night", gap: next.night - next.noon },
+  ];
+  for (const g of gaps) {
+    if (g.gap < MIN_SLOT_GAP_MIN) {
+      return {
+        valid: false,
+        reason: `${SLOT_LABEL[g.a]}·${SLOT_LABEL[g.b]} 사이는 최소 ${MIN_SLOT_GAP_MIN / 60}시간 이상 떨어져야 해요`,
+      };
+    }
+  }
+
+  return { valid: true };
+}

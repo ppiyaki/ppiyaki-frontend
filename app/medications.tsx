@@ -1,11 +1,16 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import { useConfirm } from "@/contexts/confirm-context";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
 import {
   describeDaysOfWeek,
 } from "@/services/days-of-week";
-import { listMedicines, Medicine } from "@/services/medicines";
+import {
+  deleteMedicine,
+  listMedicines,
+  Medicine,
+} from "@/services/medicines";
 import { listSchedules, MedicationSchedule } from "@/services/schedules";
 import {
   fromServerSlot,
@@ -62,11 +67,13 @@ const SLOT_BG: Record<MealSlot, string> = {
 export default function MedicationsScreen() {
   useRequireAuth();
   const router = useRouter();
+  const confirm = useConfirm();
   const [items, setItems] = useState<MedicineWithSchedules[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mealTimes, setMealTimesState] = useState<MealTimes | null>(null);
   const [groupMode, setGroupMode] = useState<GroupMode>("prescription");
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -135,6 +142,34 @@ export default function MedicationsScreen() {
   const handleGroupChange = async (mode: GroupMode) => {
     setGroupMode(mode);
     await SecureStore.setItemAsync(GROUP_MODE_KEY, mode);
+  };
+
+  const handleDelete = async (med: Medicine) => {
+    if (deletingId != null) return;
+    const ok = await confirm({
+      title: "약 삭제",
+      message: `'${med.name}' 과 모든 복약 시간이 함께 삭제돼요.\n계속할까요?`,
+      confirmText: "삭제",
+      danger: true,
+    });
+    if (!ok) return;
+    setDeletingId(med.id);
+    try {
+      await deleteMedicine(med.id);
+      // 낙관적 갱신 — 응답 기다리지 않고 목록에서 즉시 제거 후 백그라운드 재조회
+      setItems((prev) => prev.filter((it) => it.medicine.id !== med.id));
+      void loadAll();
+    } catch (e) {
+      const msg =
+        e instanceof ApiError ? e.toUserMessage() : "삭제에 실패했어요";
+      await confirm({
+        title: "삭제 실패",
+        message: msg,
+        confirmText: "확인",
+      });
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const handleAskBot = () => {
@@ -225,9 +260,18 @@ export default function MedicationsScreen() {
           !error &&
           items.length > 0 &&
           (groupMode === "prescription" ? (
-            <PrescriptionGroupedList items={items} />
+            <PrescriptionGroupedList
+              items={items}
+              onDelete={handleDelete}
+              deletingId={deletingId}
+            />
           ) : (
-            <SlotGroupedList items={items} mealTimes={mealTimes} />
+            <SlotGroupedList
+              items={items}
+              mealTimes={mealTimes}
+              onDelete={handleDelete}
+              deletingId={deletingId}
+            />
           ))}
       </ScrollView>
 
@@ -249,8 +293,12 @@ export default function MedicationsScreen() {
 
 function PrescriptionGroupedList({
   items,
+  onDelete,
+  deletingId,
 }: {
   items: MedicineWithSchedules[];
+  onDelete: (med: Medicine) => void;
+  deletingId: number | null;
 }) {
   const groups = new Map<number | "manual", MedicineWithSchedules[]>();
   for (const it of items) {
@@ -272,6 +320,8 @@ function PrescriptionGroupedList({
               <MedicineCard
                 key={it.medicine.id}
                 item={it}
+                onDelete={onDelete}
+                deleting={deletingId === it.medicine.id}
               />
             ))}
           </View>
@@ -286,9 +336,13 @@ function PrescriptionGroupedList({
 function SlotGroupedList({
   items,
   mealTimes,
+  onDelete,
+  deletingId,
 }: {
   items: MedicineWithSchedules[];
   mealTimes: MealTimes | null;
+  onDelete: (med: Medicine) => void;
+  deletingId: number | null;
 }) {
   const slotMap: Record<MealSlot, MedicineWithSchedules[]> = {
     morning: [],
@@ -344,6 +398,8 @@ function SlotGroupedList({
                 <MedicineCard
                   key={`${slot}-${it.medicine.id}`}
                   item={it}
+                  onDelete={onDelete}
+                  deleting={deletingId === it.medicine.id}
                 />
               ))}
             </View>
@@ -360,6 +416,8 @@ function SlotGroupedList({
               <MedicineCard
                 key={`pending-${it.medicine.id}`}
                 item={it}
+                onDelete={onDelete}
+                deleting={deletingId === it.medicine.id}
               />
             ))}
           </View>
@@ -373,8 +431,12 @@ function SlotGroupedList({
 
 function MedicineCard({
   item,
+  onDelete,
+  deleting,
 }: {
   item: MedicineWithSchedules;
+  onDelete: (med: Medicine) => void;
+  deleting: boolean;
 }) {
   const router = useRouter();
   const { medicine, schedules } = item;
@@ -399,6 +461,7 @@ function MedicineCard({
       style={({ pressed }) => [
         styles.medCard,
         pressed && { backgroundColor: "#FBF7EC" },
+        deleting && { opacity: 0.5 },
       ]}
     >
       <View style={styles.medThumb}>
@@ -460,7 +523,21 @@ function MedicineCard({
           </View>
         )}
       </View>
-      <Ionicons name="chevron-forward" size={18} color="#BBB" />
+      <Pressable
+        onPress={() => onDelete(medicine)}
+        disabled={deleting}
+        hitSlop={12}
+        style={({ pressed }) => [
+          styles.deleteBtn,
+          pressed && !deleting && { opacity: 0.6 },
+        ]}
+      >
+        {deleting ? (
+          <ActivityIndicator size="small" color="#E14B4B" />
+        ) : (
+          <Ionicons name="trash-outline" size={18} color="#E14B4B" />
+        )}
+      </Pressable>
     </Pressable>
   );
 }
@@ -682,6 +759,14 @@ const styles = StyleSheet.create({
   pendingText: {
     fontSize: 11,
     color: "#7A5C00",
+  },
+  deleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FCEBEB",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   footer: { paddingHorizontal: 20, paddingBottom: 16 },

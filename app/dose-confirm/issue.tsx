@@ -1,6 +1,5 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
-import { useConfirm } from "@/contexts/confirm-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -8,7 +7,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function DoseConfirmIssueScreen() {
   const router = useRouter();
-  const confirm = useConfirm();
   const { uri, attempts, scheduleId, targetDate, errorMessage } =
     useLocalSearchParams<{
       uri?: string;
@@ -19,7 +17,7 @@ export default function DoseConfirmIssueScreen() {
     }>();
 
   const attemptCount = Number(attempts ?? "1");
-  const showFamilyHelp = attemptCount >= 2;
+  const multipleAttempts = attemptCount >= 2;
 
   const handleRetry = () => {
     router.replace({
@@ -30,18 +28,6 @@ export default function DoseConfirmIssueScreen() {
         targetDate,
       },
     });
-  };
-
-  const handleAskFamily = async () => {
-    const ok = await confirm({
-      title: "보호자에게 알릴까요?",
-      message:
-        "보호자에게 도움을 요청하는 알림이 전송돼요.\n잠시 뒤 보호자가 연락드릴 거예요.",
-      confirmText: "도움 요청",
-    });
-    if (!ok) return;
-    // TODO: 보호자 알림 API 연결
-    router.replace("/(tabs)" as any);
   };
 
   return (
@@ -64,16 +50,14 @@ export default function DoseConfirmIssueScreen() {
         <AppText type="extrabold" style={styles.title}>
           {errorMessage
             ? "복약 인증에 실패했어요"
-            : showFamilyHelp
+            : multipleAttempts
               ? "약 확인이 잘 안 되네요"
               : "약 개수가 조금 다른 것 같아요"}
         </AppText>
         <AppText type="pretendard-m" style={styles.desc}>
           {errorMessage
             ? errorMessage
-            : showFamilyHelp
-              ? "사진을 다시 찍거나, 보호자에게\n도움을 요청해보세요"
-              : "조금 더 밝은 곳에서 다시 한 번\n찍어볼까요?"}
+            : "조금 더 밝은 곳에서 다시 한 번\n찍어볼까요?"}
         </AppText>
 
         {uri && (
@@ -103,20 +87,6 @@ export default function DoseConfirmIssueScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        {showFamilyHelp && (
-          <Pressable
-            onPress={handleAskFamily}
-            style={({ pressed }) => [
-              styles.helpBtn,
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <Ionicons name="people" size={22} color="#FFF" />
-            <AppText type="pretendard-b" style={styles.helpBtnText}>
-              보호자에게 도움 요청하기
-            </AppText>
-          </Pressable>
-        )}
         <Pressable
           onPress={handleRetry}
           style={({ pressed }) => [
@@ -243,19 +213,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
     gap: 10,
-  },
-  helpBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: "#E14B4B",
-  },
-  helpBtnText: {
-    fontSize: 16,
-    color: "#FFF",
   },
   retryBtn: {
     flexDirection: "row",
