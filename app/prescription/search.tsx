@@ -3,10 +3,7 @@ import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
 import { MfdsMedicine, searchMfdsMedicines } from "@/services/medicines";
-import {
-  addManualCandidate,
-  decideCandidate,
-} from "@/services/prescriptions";
+import { addManualCandidate } from "@/services/prescriptions";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -76,19 +73,22 @@ export default function PrescriptionSearchScreen() {
     setSubmittingItemSeq(med.itemSeq);
     try {
       if (isCorrect && candidateId) {
-        await decideCandidate(
-          pId,
-          Number(candidateId),
-          "MANUALLY_CORRECTED",
-          { chosenItemSeq: med.itemSeq },
-        );
+        router.replace({
+          pathname: "/prescription/review" as any,
+          params: {
+            id: String(pId),
+            correctedCandidateId: String(candidateId),
+            chosenItemSeq: med.itemSeq,
+            chosenItemName: med.itemName,
+          },
+        });
       } else {
         await addManualCandidate(pId, {
           itemSeq: med.itemSeq,
           itemName: med.itemName,
         });
+        router.back();
       }
-      router.back();
     } catch (e) {
       setSubmittingItemSeq(null);
       if (e instanceof ApiError && e.code === "CARE_004") {
@@ -276,6 +276,8 @@ const styles = StyleSheet.create({
   },
 
   tipCard: {
+    alignSelf: "stretch",
+    width: "100%",
     backgroundColor: "#FFF8E0",
     borderRadius: 14,
     paddingHorizontal: 14,

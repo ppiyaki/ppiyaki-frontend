@@ -219,6 +219,8 @@ const styles = StyleSheet.create({
   },
 
   tipCard: {
+    alignSelf: "stretch",
+    width: "100%",
     backgroundColor: "#FFF8E0",
     borderRadius: 14,
     paddingHorizontal: 14,

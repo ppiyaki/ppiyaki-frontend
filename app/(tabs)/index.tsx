@@ -291,7 +291,7 @@ function TodayChip({
   return (
     <View style={styles.todayChip}>
       <View style={styles.todayIconWrap}>
-        <Ionicons name={meta.icon} size={20} color={iconColor} />
+        <Ionicons name={meta.icon} size={17} color={iconColor} />
         {badgeColor && (
           <View style={[styles.todayBadge, { backgroundColor: badgeColor }]}>
             <Ionicons name={badgeIcon} size={10} color="#FFF" />
@@ -383,7 +383,8 @@ const styles = StyleSheet.create({
 
   /* ── 캐릭터 ── */
   characterSection: {
-    flex: 1,
+    flex: 1.15,
+    minHeight: 140,
     alignItems: "center",
     justifyContent: "center",
     // 짧은 화면에서 캐릭터가 헤더/카드 영역으로 침범하지 않도록 클리핑
@@ -394,7 +395,7 @@ const styles = StyleSheet.create({
     // 캐릭터 비율 유지하며 부모(characterSection) 안에 들어가도록 flex 기반 크기
     flex: 1,
     width: 238,
-    maxHeight: 244,
+    maxHeight: 220,
     justifyContent: "center",
   },
   characterImg: {
@@ -402,7 +403,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     maxWidth: 238,
-    maxHeight: 244,
+    maxHeight: 220,
   },
   bubble: {
     position: "absolute",
@@ -450,20 +451,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 28,
+    gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingTop: 2,
+    paddingBottom: 2,
   },
   todayChip: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    minWidth: 48,
+    gap: 6,
+    minWidth: 72,
+    justifyContent: "center",
   },
   todayIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: "#FFF",
     borderWidth: 1,
     borderColor: "#F1ECDB",
@@ -474,16 +477,16 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: -4,
     bottom: -4,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
     borderColor: "#FDFCF3",
   },
   todayLabel: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#666",
   },
 
@@ -561,7 +564,7 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     // 넓은 화면(iPad 호환 모드 등)에서 버튼이 정사각형 유지하려고 무한정 커져
     // 캐릭터/헤더 영역을 짓누르는 걸 방지. 일반 휴대폰에선 영향 없음.
-    maxHeight: 150,
+    maxHeight: 142,
     backgroundColor: "#FFF",
     borderRadius: 20,
     paddingVertical: 14,

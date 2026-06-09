@@ -57,11 +57,7 @@ export default function FamilyLoginScreen() {
     };
   }, [router]);
 
-  const routeAfterAuth = async (isOnboarded: boolean) => {
-    if (!isOnboarded) {
-      router.replace(ROUTE_PATHS.onboarding as any);
-      return;
-    }
+  const routeAfterAuth = async () => {
     const route = await resolveAuthRoute();
     router.replace(ROUTE_PATHS[route] as any);
   };
@@ -69,8 +65,8 @@ export default function FamilyLoginScreen() {
   const handleKakaoLogin = async () => {
     setLoading(true);
     try {
-      const { isOnboarded } = await loginWithKakao();
-      await routeAfterAuth(isOnboarded);
+      await loginWithKakao();
+      await routeAfterAuth();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "로그인에 실패했습니다.";
       Alert.alert("로그인 실패", msg);
@@ -86,8 +82,8 @@ export default function FamilyLoginScreen() {
     if (!canLocalLogin) return;
     setLocalLoading(true);
     try {
-      const { isOnboarded } = await loginLocal(loginId.trim(), password);
-      await routeAfterAuth(isOnboarded);
+      await loginLocal(loginId.trim(), password);
+      await routeAfterAuth();
     } catch (e) {
       const msg =
         e instanceof ApiError && e.status === 401

@@ -154,20 +154,17 @@ export default function FamilyHomeScreen() {
           }
           const noNickname =
             me.nickname == null || me.nickname.trim().length === 0;
-          if (me.isOnboarded === false || noNickname) {
+          if (me.isOnboarded === false && noNickname) {
             if (__DEV__) {
               console.log(
-                "[family-home] onboarding incomplete → redirect (isOnboarded:",
+                "[family-home] onboarding incomplete → redirect:",
                 me.isOnboarded,
-                "nickname:",
-                me.nickname,
-                ")",
               );
             }
             router.replace("/signup/terms" as any);
             return;
           }
-          setCaregiverName(me.nickname);
+          setCaregiverName(me.nickname?.trim() ? me.nickname : "보호자");
         } catch (e) {
           console.log("[family-home] getMe failed:", e);
         }

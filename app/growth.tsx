@@ -86,6 +86,10 @@ function formatStageMessage(template: string, name: string): string {
   return template.replaceAll("{name}", safeName);
 }
 
+function formatTimelineStageLabel(label: string): string {
+  return label.replace(" 삐약이", "\n삐약이");
+}
+
 export default function GrowthScreen() {
   const router = useRouter();
   const [nickname, setNickname] = useState<string>("");
@@ -310,7 +314,7 @@ export default function GrowthScreen() {
                           ]}
                           numberOfLines={2}
                         >
-                          {stage.label}
+                          {formatTimelineStageLabel(stage.label)}
                         </AppText>
                       </View>
                     );
@@ -651,7 +655,7 @@ const styles = StyleSheet.create({
   },
   timelineItem: {
     alignItems: "center",
-    width: 50,
+    width: 56,
     gap: 6,
   },
   stageCircle: {
@@ -705,10 +709,10 @@ const styles = StyleSheet.create({
     borderColor: "#FFF",
   },
   stageLabel: {
-    fontSize: 12,
+    fontSize: 16,
     color: "#666",
     textAlign: "center",
-    lineHeight: 16,
+    lineHeight: 18,
   },
   stageLabelCurrent: {
     color: "#222",

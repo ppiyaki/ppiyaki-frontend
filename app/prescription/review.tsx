@@ -126,7 +126,13 @@ function inferSuggestedSlots(
 export default function PrescriptionReviewScreen() {
   const router = useRouter();
   const confirm = useConfirm();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, correctedCandidateId, chosenItemSeq, chosenItemName } =
+    useLocalSearchParams<{
+      id?: string;
+      correctedCandidateId?: string;
+      chosenItemSeq?: string;
+      chosenItemName?: string;
+    }>();
   const prescriptionId = id ? Number(id) : null;
 
   const [detail, setDetail] = useState<PrescriptionDetail | null>(null);
@@ -136,6 +142,9 @@ export default function PrescriptionReviewScreen() {
   const [slotMap, setSlotMap] = useState<SlotMap>({});
   const [amountMap, setAmountMap] = useState<AmountMap>({});
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [draftCorrections, setDraftCorrections] = useState<
+    Record<number, { itemSeq: string; itemName: string }>
+  >({});
   /** candidate별 dosage 입력값 (OCR 누락분 보강용) */
   const [dosageMap, setDosageMap] = useState<Record<number, string>>({});
 
@@ -204,6 +213,21 @@ export default function PrescriptionReviewScreen() {
       return next;
     });
   }, [detail]);
+
+  useEffect(() => {
+    const candidateId = correctedCandidateId
+      ? Number(correctedCandidateId)
+      : null;
+    const seq = Array.isArray(chosenItemSeq) ? chosenItemSeq[0] : chosenItemSeq;
+    const name = Array.isArray(chosenItemName)
+      ? chosenItemName[0]
+      : chosenItemName;
+    if (!candidateId || !seq || !name) return;
+    setDraftCorrections((prev) => ({
+      ...prev,
+      [candidateId]: { itemSeq: seq, itemName: name },
+    }));
+  }, [correctedCandidateId, chosenItemName, chosenItemSeq]);
 
   // EXACT 매칭이라도 자동 ACCEPT 하지 않는다.
   // 백엔드가 제안한 suggestedMealSlots 가 "전 끼니" 인 경우가 많은데, 시니어가 점심만
@@ -285,7 +309,7 @@ export default function PrescriptionReviewScreen() {
   ) => {
     if (!prescriptionId) return;
     // ACCEPTED 시 슬롯 1개 이상 선택 필수 (회색 버튼이지만 탭은 가능 → 여기서 가드)
-    if (decision === "ACCEPTED" && (slotMap[candidateId]?.size ?? 0) === 0) {
+    if (decision !== "REJECTED" && (slotMap[candidateId]?.size ?? 0) === 0) {
       await confirm({
         title: "복약 시간대를 선택해주세요",
         message:
@@ -339,6 +363,13 @@ export default function PrescriptionReviewScreen() {
             }
           : prev,
       );
+      if (decision === "MANUALLY_CORRECTED") {
+        setDraftCorrections((prev) => {
+          const next = { ...prev };
+          delete next[candidateId];
+          return next;
+        });
+      }
     } catch (e) {
       await showApiError(e);
     } finally {
@@ -555,6 +586,7 @@ export default function PrescriptionReviewScreen() {
           <CandidateCard
             key={c.id}
             candidate={c}
+            draftCorrection={draftCorrections[c.id]}
             busy={busyCandidateId === c.id}
             selectedSlots={slotMap[c.id] ?? new Set()}
             amount={
@@ -567,7 +599,12 @@ export default function PrescriptionReviewScreen() {
             onToggleSlot={(slot) => toggleSlot(c.id, slot)}
             onChangeAmount={(field, value) => updateAmount(c.id, field, value)}
             onChangeDosage={(value) => updateDosage(c.id, value)}
-            onAccept={() => handleDecide(c.id, "ACCEPTED")}
+            onAccept={() => {
+              const draft = draftCorrections[c.id];
+              return draft
+                ? handleDecide(c.id, "MANUALLY_CORRECTED", draft.itemSeq)
+                : handleDecide(c.id, "ACCEPTED");
+            }}
             onReject={() => handleDecide(c.id, "REJECTED")}
             onCorrect={() => handleManualCorrect(c.id)}
           />
@@ -641,6 +678,7 @@ export default function PrescriptionReviewScreen() {
 
 function CandidateCard({
   candidate,
+  draftCorrection,
   busy,
   selectedSlots,
   amount,
@@ -653,6 +691,7 @@ function CandidateCard({
   onCorrect,
 }: {
   candidate: PrescriptionCandidate;
+  draftCorrection?: { itemSeq: string; itemName: string };
   busy: boolean;
   selectedSlots: Set<MealSlot>;
   amount: AmountState;
@@ -666,7 +705,10 @@ function CandidateCard({
 }) {
   const decided = candidate.caregiverDecision;
   const display =
-    candidate.matchedItemName ?? candidate.extractedName ?? "이름 미확인";
+    draftCorrection?.itemName ??
+    candidate.matchedItemName ??
+    candidate.extractedName ??
+    "이름 미확인";
   const notRejected = decided !== "REJECTED";
 
   return (
@@ -699,8 +741,15 @@ function CandidateCard({
           )}
           {candidate.matchType && (
             <AppText type="pretendard-r" style={styles.cardMatch}>
-              매칭: {candidate.matchType}
-              {candidate.matchReason ? ` (${candidate.matchReason})` : ""}
+              {draftCorrection ? "다른 약 선택됨" : `매칭: ${candidate.matchType}`}
+              {!draftCorrection && candidate.matchReason
+                ? ` (${candidate.matchReason})`
+                : ""}
+            </AppText>
+          )}
+          {draftCorrection && !candidate.matchType && (
+            <AppText type="pretendard-r" style={styles.cardMatch}>
+              다른 약 선택됨
             </AppText>
           )}
         </View>
