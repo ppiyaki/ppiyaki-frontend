@@ -4,13 +4,13 @@ import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
 import { getMe } from "@/services/auth";
 import { describeDaysOfWeek } from "@/services/days-of-week";
+import { emitMedicationUpdated } from "@/services/medication-events";
 import { deleteMedicine, getMedicine, Medicine } from "@/services/medicines";
 import {
   createSchedule,
   deleteSchedule,
   listSchedules,
   MedicationSchedule,
-  parseDosageQuantity,
 } from "@/services/schedules";
 import {
   getMealTimes,
@@ -23,6 +23,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -55,6 +56,9 @@ const SLOT_BG: Record<MealSlot, string> = {
   night: "#E0E0E8",
 };
 
+const DOSAGE_UNITS = ["정", "캡슐", "포", "ml", "방울", "회"] as const;
+type DosageUnit = (typeof DOSAGE_UNITS)[number];
+
 export default function MedicationDetailScreen() {
   const router = useRouter();
   const confirm = useConfirm();
@@ -69,7 +73,9 @@ export default function MedicationDetailScreen() {
 
   // 새 schedule 추가용 (보호자만)
   const [newSlot, setNewSlot] = useState<MealSlot | null>(null);
-  const [newDosage, setNewDosage] = useState("1정");
+  const [newDoseAmount, setNewDoseAmount] = useState("1");
+  const [newDoseUnit, setNewDoseUnit] = useState<DosageUnit>("정");
+  const [unitPickerOpen, setUnitPickerOpen] = useState(false);
   const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
@@ -101,15 +107,28 @@ export default function MedicationDetailScreen() {
     if (!medicineId || !newSlot) return;
     setAdding(true);
     try {
-      const trimmed = newDosage.trim() || "1정";
-      await createSchedule(medicineId, {
-        mealSlot: toServerSlot(newSlot),
-        dosage: trimmed,
-        dosageQuantity: parseDosageQuantity(trimmed),
+      const selectedSlot = newSlot;
+      const selectedUnit = newDoseUnit;
+      const quantity = parseDoseAmount(newDoseAmount);
+      const dosage = `${formatDoseAmount(quantity)}${selectedUnit}`;
+      const created = await createSchedule(medicineId, {
+        mealSlot: toServerSlot(selectedSlot),
+        dosage,
+        dosageUnit: selectedUnit,
+        dosageQuantity: quantity,
       });
       setNewSlot(null);
-      setNewDosage("1정");
+      setNewDoseAmount("1");
+      setNewDoseUnit("정");
+      emitMedicationUpdated();
       await load();
+      setSchedules((prev) =>
+        prev.map((schedule) =>
+          schedule.id === created.id
+            ? { ...schedule, dosageUnit: schedule.dosageUnit ?? selectedUnit }
+            : schedule,
+        ),
+      );
     } catch (e) {
       const msg =
         e instanceof ApiError ? e.toUserMessage() : "추가에 실패했어요";
@@ -134,6 +153,7 @@ export default function MedicationDetailScreen() {
     if (!ok) return;
     try {
       await deleteSchedule(medicineId, scheduleId);
+      emitMedicationUpdated();
       await load();
     } catch (e) {
       const msg =
@@ -157,6 +177,7 @@ export default function MedicationDetailScreen() {
     if (!ok) return;
     try {
       await deleteMedicine(medicineId);
+      emitMedicationUpdated();
       router.back();
     } catch (e) {
       const msg =
@@ -338,13 +359,28 @@ export default function MedicationDetailScreen() {
                   복용량
                 </AppText>
                 <TextInput
-                  value={newDosage}
-                  onChangeText={setNewDosage}
-                  placeholder="1정"
+                  value={newDoseAmount}
+                  onChangeText={(value) =>
+                    setNewDoseAmount(cleanDoseAmount(value))
+                  }
+                  placeholder="1"
                   placeholderTextColor="#BBB"
-                  style={styles.dosageInput}
-                  maxLength={20}
+                  keyboardType="decimal-pad"
+                  style={styles.dosageAmountInput}
+                  maxLength={6}
                 />
+                <Pressable
+                  onPress={() => setUnitPickerOpen(true)}
+                  style={({ pressed }) => [
+                    styles.unitSelect,
+                    pressed && { backgroundColor: "#F4FBF9" },
+                  ]}
+                >
+                  <AppText type="pretendard-b" style={styles.unitSelectText}>
+                    {newDoseUnit}
+                  </AppText>
+                  <Ionicons name="chevron-down" size={16} color="#5BC4AE" />
+                </Pressable>
               </View>
               <Pressable
                 onPress={handleAddSchedule}
@@ -391,8 +427,71 @@ export default function MedicationDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      <Modal
+        visible={unitPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setUnitPickerOpen(false)}
+      >
+        <Pressable
+          style={styles.unitBackdrop}
+          onPress={() => setUnitPickerOpen(false)}
+        >
+          <Pressable style={styles.unitSheet} onPress={() => {}}>
+            <AppText type="pretendard-b" style={styles.unitSheetTitle}>
+              복용량 단위 선택
+            </AppText>
+            {DOSAGE_UNITS.map((unit) => {
+              const selected = unit === newDoseUnit;
+              return (
+                <Pressable
+                  key={unit}
+                  onPress={() => {
+                    setNewDoseUnit(unit);
+                    setUnitPickerOpen(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.unitOption,
+                    selected && styles.unitOptionOn,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <AppText
+                    type="pretendard-b"
+                    style={[
+                      styles.unitOptionText,
+                      selected && styles.unitOptionTextOn,
+                    ]}
+                  >
+                    {unit}
+                  </AppText>
+                  {selected && (
+                    <Ionicons name="checkmark" size={18} color="#5BC4AE" />
+                  )}
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
+}
+
+function cleanDoseAmount(value: string): string {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const [first, ...rest] = cleaned.split(".");
+  return rest.length > 0 ? `${first}.${rest.join("")}` : first;
+}
+
+function parseDoseAmount(value: string): number {
+  const n = parseFloat(value);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function formatDoseAmount(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value);
 }
 
 function ScheduleRow({
@@ -403,6 +502,7 @@ function ScheduleRow({
   onDelete?: () => void;
 }) {
   const time = schedule.scheduledTime.slice(0, 5);
+  const dosageText = formatScheduleDosage(schedule);
   return (
     <View style={styles.scheduleRow}>
       <View style={styles.scheduleTime}>
@@ -412,7 +512,7 @@ function ScheduleRow({
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <AppText type="pretendard-b" style={styles.scheduleDosage}>
-          {schedule.dosage}
+          {dosageText}
         </AppText>
         <AppText type="pretendard-m" style={styles.scheduleDays}>
           {describeDaysOfWeek(schedule.daysOfWeek)}
@@ -432,6 +532,13 @@ function ScheduleRow({
       )}
     </View>
   );
+}
+
+function formatScheduleDosage(schedule: MedicationSchedule): string {
+  const raw = schedule.dosage?.trim() ?? "";
+  if (!raw) return "1정";
+  if (/[^0-9.]/.test(raw)) return raw;
+  return `${raw}${schedule.dosageUnit ?? "정"}`;
 }
 
 const styles = StyleSheet.create({
@@ -604,17 +711,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   dosageLabel: { fontSize: 14, color: "#444" },
-  dosageInput: {
+  dosageAmountInput: {
     flex: 1,
     height: 42,
     paddingHorizontal: 12,
-    fontSize: 14,
-    fontFamily: "Pretendard-Medium",
+    fontSize: 15,
+    fontFamily: "Pretendard-Bold",
     color: "#222",
     backgroundColor: "#FAFAF6",
     borderWidth: 1,
     borderColor: "#F1ECDB",
     borderRadius: 10,
+    textAlign: "center",
+  },
+  unitSelect: {
+    height: 42,
+    minWidth: 92,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#BDEFEA",
+    backgroundColor: "#FFF",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  unitSelectText: {
+    fontSize: 15,
+    color: "#222",
   },
   addBtn: {
     flexDirection: "row",
@@ -656,5 +781,47 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: "#5BC4AE",
+  },
+  unitBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-end",
+  },
+  unitSheet: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 32,
+    gap: 8,
+  },
+  unitSheetTitle: {
+    fontSize: 17,
+    color: "#222",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  unitOption: {
+    height: 50,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FAFAF6",
+    borderWidth: 1,
+    borderColor: "#F1ECDB",
+  },
+  unitOptionOn: {
+    borderColor: "#5BC4AE",
+    backgroundColor: "#E8F7F2",
+  },
+  unitOptionText: {
+    fontSize: 16,
+    color: "#444",
+  },
+  unitOptionTextOn: {
+    color: "#222",
   },
 });

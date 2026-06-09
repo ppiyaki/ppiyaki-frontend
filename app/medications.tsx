@@ -6,6 +6,7 @@ import { ApiError } from "@/services/api";
 import {
   describeDaysOfWeek,
 } from "@/services/days-of-week";
+import { emitMedicationUpdated } from "@/services/medication-events";
 import {
   deleteMedicine,
   listMedicines,
@@ -156,6 +157,7 @@ export default function MedicationsScreen() {
     setDeletingId(med.id);
     try {
       await deleteMedicine(med.id);
+      emitMedicationUpdated();
       // 낙관적 갱신 — 응답 기다리지 않고 목록에서 즉시 제거 후 백그라운드 재조회
       setItems((prev) => prev.filter((it) => it.medicine.id !== med.id));
       void loadAll();

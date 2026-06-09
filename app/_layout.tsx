@@ -7,6 +7,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
 void SplashScreen.preventAutoHideAsync().catch(() => {
@@ -69,7 +70,8 @@ export default function RootLayout() {
   }
 
   return (
-    <ConfirmProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <ConfirmProvider>
       {/* 배경이 밝은 크림색이라 기본(light) StatusBar는 흰 아이콘이 안 보임 — dark 강제 */}
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
@@ -83,11 +85,15 @@ export default function RootLayout() {
         <Stack.Screen name="family" />
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
-    </ConfirmProvider>
+      </ConfirmProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   splashContainer: {
     flex: 1,
     backgroundColor: "#FFD24D",

@@ -9,6 +9,7 @@ export interface MedicationSchedule {
   /** v0.9.0: 시니어 mealTimes로 동적 계산되어 응답에만 포함 ("HH:mm:ss") */
   scheduledTime: string;
   dosage: string;
+  dosageUnit?: string | null;
   daysOfWeek: string; // "DAILY" 또는 "MON,WED,FRI"
   startDate: string; // ISO date
   endDate: string | null;
@@ -20,6 +21,7 @@ export interface CreateScheduleBody {
   mealSlot: ServerMealSlot;
   /** "1정", "10ml" 등 단위 포함 텍스트 */
   dosage: string;
+  dosageUnit?: string;
   /** 1회 복용 수량 (정/캡슐/ml 수) — 백엔드 필수 */
   dosageQuantity: number;
   daysOfWeek?: string;
@@ -30,6 +32,7 @@ export interface CreateScheduleBody {
 export interface UpdateScheduleBody {
   mealSlot?: ServerMealSlot;
   dosage?: string;
+  dosageUnit?: string;
   dosageQuantity?: number;
   daysOfWeek?: string;
   startDate?: string;

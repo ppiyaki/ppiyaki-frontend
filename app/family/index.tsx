@@ -7,10 +7,13 @@ import { LinkedSenior, listLinkedSeniors } from "@/services/caregivers";
 import {
   DailyDashboard,
   DailySlot,
+  SlotStatus,
   WeeklyDashboard,
   getDashboardDaily,
   getDashboardWeekly,
 } from "@/services/dashboard";
+import { isTakenStatus, paletteForStatus } from "@/services/dashboard-status";
+import { MEDICATION_UPDATED_EVENT } from "@/services/medication-events";
 import { listMedicines, Medicine } from "@/services/medicines";
 import { listPrescriptions } from "@/services/prescriptions";
 import { ServerMealSlot } from "@/services/user-settings";
@@ -26,16 +29,15 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  DeviceEventEmitter,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-type DoseStatus = "done" | "upcoming" | "missed";
 
 interface Dose {
   time: string;
   label: string;
   meds: string;
-  status: DoseStatus;
+  status: SlotStatus;
 }
 
 const SENIOR_IMAGES: ImageSourcePropType[] = [
@@ -87,26 +89,28 @@ function mapDailySlotToDose(slot: DailySlot): Dose {
           .slice(0, 2)
           .join(", ") +
         (slot.medicines.length > 2 ? ` 외 ${slot.medicines.length - 2}개` : "");
-  let status: DoseStatus;
-  if (slot.status === "PERFECT" || slot.status === "DELAYED") status = "done";
-  else if (slot.status === "MISSED") status = "missed";
-  else status = "upcoming"; // PENDING, NOT_SCHEDULED
   return {
     time: trimMealTime(slot.mealTime),
     label: SLOT_LABEL[slot.slot],
     meds,
-    status,
+    status: slot.status,
   };
 }
 
-/** 오늘 기준 weekly.days 에서 뒤에서부터 연속 PERFECT 일수 카운트 */
+/** 오늘이 아직 진행 중이면 건너뛰고, 가장 최근 완료일 기준 연속 복약 성공 일수 카운트 */
 function calcStreakFromWeekly(weekly: WeeklyDashboard): number {
   let count = 0;
+  let started = false;
   for (let i = weekly.days.length - 1; i >= 0; i--) {
     const d = weekly.days[i];
     if (d.dayStatus === "FUTURE") continue;
-    if (d.dayStatus === "PERFECT") count += 1;
-    else break;
+    if (!started && d.dayStatus === "PENDING") continue;
+    started = true;
+    if (isTakenStatus(d.dayStatus)) {
+      count += 1;
+    } else {
+      break;
+    }
   }
   return count;
 }
@@ -209,6 +213,14 @@ export default function FamilyHomeScreen() {
 
   // 선택된 시니어가 바뀔 때마다 그 시니어의 약물/처방전/대시보드 다시 fetch
   useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener(
+      MEDICATION_UPDATED_EVENT,
+      () => setRefreshKey((k) => k + 1),
+    );
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
     if (selectedSeniorId == null) {
       setMedicines([]);
       setDaily(null);
@@ -247,7 +259,7 @@ export default function FamilyHomeScreen() {
   }, [selectedSeniorId, refreshKey]);
 
   const doses: Dose[] = daily?.slots.map(mapDailySlotToDose) ?? [];
-  const completed = doses.filter((d) => d.status === "done").length;
+  const completed = doses.filter((d) => isTakenStatus(d.status)).length;
   const streakDays = weekly ? calcStreakFromWeekly(weekly) : 0;
 
   const seniorName = senior?.nickname ?? "어르신";
@@ -311,6 +323,8 @@ export default function FamilyHomeScreen() {
             {seniorName} 님의{"\n"}오늘 복약 여정
           </AppText>
 
+          <DoseLegend />
+
           <View style={styles.timeline}>
             {doses.length === 0 ? (
               <AppText type="pretendard-m" style={styles.doseEmpty}>
@@ -365,7 +379,7 @@ export default function FamilyHomeScreen() {
           <View style={styles.weekRow}>
             {WEEK_DAYS.map((day, idx) => {
               const dayInfo = weekly?.days[idx];
-              const on = dayInfo?.dayStatus === "PERFECT";
+              const on = dayInfo ? isTakenStatus(dayInfo.dayStatus) : false;
               return (
                 <View key={day} style={styles.weekItem}>
                   <AppText type="pretendard-m" style={styles.weekLabel}>
@@ -501,9 +515,41 @@ export default function FamilyHomeScreen() {
   );
 }
 
+function doseStatusIcon(status: SlotStatus): keyof typeof Ionicons.glyphMap | null {
+  if (status === "PERFECT") return "checkmark";
+  if (status === "DELAYED") return "time";
+  if (status === "MISSED") return "close";
+  return null;
+}
+
+function DoseLegend() {
+  const items: { status: SlotStatus; label: string }[] = [
+    { status: "PERFECT", label: "정상" },
+    { status: "DELAYED", label: "지각" },
+    { status: "MISSED", label: "미복용" },
+  ];
+  return (
+    <View style={styles.legendRow}>
+      {items.map((item) => {
+        const palette = paletteForStatus(item.status);
+        return (
+          <View key={item.status} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: palette.color }]} />
+            <AppText type="pretendard-m" style={styles.legendText}>
+              {item.label}
+            </AppText>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function DoseRow({ dose, isLast }: { dose: Dose; isLast: boolean }) {
-  const done = dose.status === "done";
-  const missed = dose.status === "missed";
+  const palette = paletteForStatus(dose.status);
+  const done = isTakenStatus(dose.status);
+  const pending = dose.status === "PENDING" || dose.status === "NOT_SCHEDULED";
+  const icon = doseStatusIcon(dose.status);
   return (
     <View style={styles.doseRow}>
       <AppText type="pretendard-m" style={styles.doseTime}>
@@ -513,16 +559,20 @@ function DoseRow({ dose, isLast }: { dose: Dose; isLast: boolean }) {
         <View
           style={[
             styles.doseDot,
-            done && styles.doseDotDone,
-            !done && !missed && styles.doseDotPending,
-            missed && styles.doseDotMissed,
+            pending
+              ? [styles.doseDotPending, { borderColor: palette.color }]
+              : { backgroundColor: palette.color },
           ]}
         >
-          {done && <Ionicons name="checkmark" size={18} color="#FFF" />}
-          {missed && <Ionicons name="close" size={18} color="#FFF" />}
+          {icon && <Ionicons name={icon} size={18} color="#FFF" />}
         </View>
         {!isLast && (
-          <View style={[styles.doseLine, done ? styles.doseLineDone : null]} />
+          <View
+            style={[
+              styles.doseLine,
+              done ? { backgroundColor: palette.color } : null,
+            ]}
+          />
         )}
       </View>
       <View style={styles.doseBody}>
@@ -536,12 +586,10 @@ function DoseRow({ dose, isLast }: { dose: Dose; isLast: boolean }) {
           type="pretendard-m"
           style={[
             styles.doseStatus,
-            done && styles.doseStatusDone,
-            !done && !missed && styles.doseStatusPending,
-            missed && styles.doseStatusMissed,
+            { color: pending ? "#888" : palette.color },
           ]}
         >
-          {done ? "완료" : missed ? "누락" : "예정"}
+          {palette.label}
         </AppText>
       </View>
     </View>
@@ -605,6 +653,26 @@ const styles = StyleSheet.create({
     color: "#222",
     textAlign: "center",
     lineHeight: 28,
+  },
+  legendRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  legendDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+  },
+  legendText: {
+    fontSize: 12,
+    color: "#666",
   },
   timeline: {
     paddingHorizontal: 6,

@@ -14,6 +14,7 @@ import {
   WeeklyDashboard,
   WeeklyDay,
 } from "@/services/dashboard";
+import { paletteForStatus as sharedPaletteForStatus } from "@/services/dashboard-status";
 import {
   fromServerSlot,
   getMealTimes,
@@ -74,11 +75,6 @@ function formatDateLabelKo(iso: string): string {
 
 /* ────────────────────── helpers: 색상 ────────────────────── */
 
-interface Palette {
-  color: string;
-  bg: string;
-}
-
 /**
  * 백엔드가 시간 지난 PENDING 을 MISSED 로 전이 안 시키는 케이스 보정.
  * mealTime + GRACE_MIN 이 현재보다 과거면 시각적으로 MISSED 취급.
@@ -98,22 +94,8 @@ function effectiveSlotStatus(
   return slotDate < new Date() ? "MISSED" : "PENDING";
 }
 
-function paletteForStatus(s: DayStatus | SlotStatus): Palette {
-  switch (s) {
-    case "PERFECT":
-      return { color: "#5BC4AE", bg: "#E8F7F2" };
-    case "DELAYED":
-      // 지연되었지만 인증 완료 — 노랑
-      return { color: "#F8B835", bg: "#FFF4C7" };
-    case "MISSED":
-      return { color: "#E14B4B", bg: "#FCEBEB" };
-    case "PENDING":
-    case "FUTURE":
-    case "NOT_SCHEDULED":
-    default:
-      // 예정/미래/일정없음 — 회색
-      return { color: "#CFCFCF", bg: "#F4F2EA" };
-  }
+function paletteForStatus(s: DayStatus | SlotStatus) {
+  return sharedPaletteForStatus(s);
 }
 
 const SLOT_LABEL: Record<MealSlot, string> = {

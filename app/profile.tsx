@@ -91,6 +91,7 @@ export default function ProfileScreen() {
       title: "로그아웃",
       message: "정말 로그아웃 하시겠어요?",
       confirmText: "로그아웃",
+      cancelText: "취소",
       danger: true,
     });
     if (!ok) return;

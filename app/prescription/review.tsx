@@ -21,6 +21,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   ActivityIndicator,
   Image,
@@ -31,6 +32,11 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const SLOT_ORDER: MealSlot[] = ["morning", "noon", "night"];
@@ -654,25 +660,83 @@ export default function PrescriptionReviewScreen() {
             <Ionicons name="close" size={24} color="#FFF" />
           </Pressable>
           {detail.maskedImageUrl && (
-            <ScrollView
-              style={styles.imageViewerScroll}
-              contentContainerStyle={styles.imageViewerContent}
-              maximumZoomScale={3}
-              minimumZoomScale={1}
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-              bouncesZoom
-            >
-              <Image
-                source={{ uri: detail.maskedImageUrl }}
-                style={styles.imageViewerImage}
-                resizeMode="contain"
-              />
-            </ScrollView>
+            <View style={styles.imageViewerContent}>
+              <ZoomablePrescriptionImage uri={detail.maskedImageUrl} />
+            </View>
           )}
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+function ZoomablePrescriptionImage({ uri }: { uri: string }) {
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedX = useSharedValue(0);
+  const savedY = useSharedValue(0);
+
+  const reset = () => {
+    "worklet";
+    scale.value = withTiming(1);
+    savedScale.value = 1;
+    translateX.value = withTiming(0);
+    translateY.value = withTiming(0);
+    savedX.value = 0;
+    savedY.value = 0;
+  };
+
+  const pinch = Gesture.Pinch()
+    .onUpdate((event) => {
+      const nextScale = savedScale.value * event.scale;
+      scale.value = Math.min(Math.max(nextScale, 1), 4);
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      if (scale.value <= 1.02) reset();
+    });
+
+  const pan = Gesture.Pan()
+    .onUpdate((event) => {
+      if (scale.value <= 1) return;
+      translateX.value = savedX.value + event.translationX;
+      translateY.value = savedY.value + event.translationY;
+    })
+    .onEnd(() => {
+      savedX.value = translateX.value;
+      savedY.value = translateY.value;
+    });
+
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (scale.value > 1.02) {
+        reset();
+        return;
+      }
+      scale.value = withTiming(2);
+      savedScale.value = 2;
+    });
+
+  const gesture = Gesture.Simultaneous(pinch, pan, doubleTap);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={gesture}>
+      <Animated.Image
+        source={{ uri }}
+        style={[styles.imageViewerImage, animatedStyle]}
+        resizeMode="contain"
+      />
+    </GestureDetector>
   );
 }
 
@@ -1096,7 +1160,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   imageViewerContent: {
-    flexGrow: 1,
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 12,
