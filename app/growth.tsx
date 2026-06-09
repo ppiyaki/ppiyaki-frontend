@@ -512,9 +512,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   bubbleText: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#5A4500",
     textAlign: "center",
+    lineHeight: 22,
   },
   heroChar: {
     width: 130,
@@ -536,7 +537,7 @@ const styles = StyleSheet.create({
     borderColor: "#FFD24D",
   },
   levelChipText: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#5A4500",
   },
   heroTitle: {
@@ -544,10 +545,10 @@ const styles = StyleSheet.create({
     color: "#222",
   },
   heroDesc: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#5A4500",
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 23,
   },
   statRow: {
     flexDirection: "row",
@@ -575,7 +576,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#777",
   },
   statValueRow: {
@@ -587,7 +588,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   statUnit: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#555",
   },
 
@@ -611,11 +612,11 @@ const styles = StyleSheet.create({
     borderColor: "#F1ECDB",
   },
   stageCaption: {
-    fontSize: 15,
+    fontSize: 17,
     color: "#444",
   },
   stageCaptionNum: {
-    fontSize: 16,
+    fontSize: 18,
     color: "#F8B835",
   },
   progressRow: {
@@ -640,7 +641,7 @@ const styles = StyleSheet.create({
     color: "#222",
   },
   progressTotal: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#888",
   },
   timeline: {
@@ -704,10 +705,10 @@ const styles = StyleSheet.create({
     borderColor: "#FFF",
   },
   stageLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: "#666",
     textAlign: "center",
-    lineHeight: 14,
+    lineHeight: 16,
   },
   stageLabelCurrent: {
     color: "#222",
@@ -761,10 +762,10 @@ const styles = StyleSheet.create({
     borderColor: "#FFF",
   },
   badgeLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#444",
     textAlign: "center",
-    lineHeight: 16,
+    lineHeight: 18,
   },
   badgeLabelLocked: {
     color: "#AAA",
@@ -780,7 +781,7 @@ const styles = StyleSheet.create({
     borderColor: "#BDEFEA",
   },
   badgeMoreText: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#5BC4AE",
   },
 
@@ -797,7 +798,7 @@ const styles = StyleSheet.create({
     borderColor: "#F1ECDB",
   },
   noteText: {
-    fontSize: 13,
+    fontSize: 15,
     color: "#666",
   },
 });

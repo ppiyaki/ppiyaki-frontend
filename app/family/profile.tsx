@@ -2,18 +2,18 @@ import AppText from "@/components/app-text";
 import { useConfirm } from "@/contexts/confirm-context";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
+import type { CareMode, SeniorGender } from "@/services/auth";
 import { getMe, logoutKakao, MeResponse } from "@/services/auth";
-import { resolveProfileImage } from "@/utils/profile-image";
 import { InviteCodeResponse, issueInviteCode } from "@/services/care-relations";
 import {
   LinkedSenior,
   listLinkedSeniors,
   unlinkSenior,
 } from "@/services/caregivers";
-import { createSenior } from "@/services/seniors";
 import { applyNotificationPreset } from "@/services/notification-settings";
+import { createSenior } from "@/services/seniors";
 import { updateSeniorProfile } from "@/services/users";
-import type { CareMode, SeniorGender } from "@/services/auth";
+import { resolveProfileImage } from "@/utils/profile-image";
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
@@ -245,7 +245,7 @@ export default function FamilyProfileScreen() {
               icon="help-circle-outline"
               iconColor="#F8B835"
               iconBg="#FFF1C8"
-              label="문의 및 신고"
+              label="문의하기"
               onPress={() => void Linking.openURL(FEEDBACK_URL)}
             />
             <SettingRow
@@ -365,167 +365,161 @@ function AddSeniorModal({
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={addStyles.kav}
         >
-        <Pressable style={styles.modalCard} onPress={() => {}}>
-          <View style={styles.modalHead}>
-            <AppText type="pretendard-b" style={styles.modalTitle}>
-              시니어 추가
-            </AppText>
-            <Pressable
-              onPress={onClose}
-              hitSlop={10}
-              style={styles.modalClose}
-            >
-              <Ionicons name="close" size={20} color="#666" />
-            </Pressable>
-          </View>
-
-          <AppText type="pretendard-m" style={styles.modalDesc}>
-            관리할 시니어의 정보를 입력해주세요.
-          </AppText>
-
-          <View style={addStyles.fieldGroup}>
-            <AppText type="pretendard-b" style={addStyles.label}>
-              닉네임
-            </AppText>
-            <TextInput
-              value={nickname}
-              onChangeText={setNickname}
-              placeholder="예: 김장군"
-              placeholderTextColor="#BBB"
-              maxLength={10}
-              style={addStyles.input}
-            />
-          </View>
-
-          <View style={addStyles.fieldGroup}>
-            <AppText type="pretendard-b" style={addStyles.label}>
-              성별
-            </AppText>
-            <View style={addStyles.choiceRow}>
-              {(
-                [
-                  { key: "MALE", label: "남" },
-                  { key: "FEMALE", label: "여" },
-                ] as { key: SeniorGender; label: string }[]
-              ).map((opt) => {
-                const on = gender === opt.key;
-                return (
-                  <Pressable
-                    key={opt.key}
-                    onPress={() => setGender(opt.key)}
-                    style={[
-                      addStyles.choiceBtn,
-                      on && addStyles.choiceBtnOn,
-                    ]}
-                  >
-                    <AppText
-                      type="pretendard-b"
-                      style={[
-                        addStyles.choiceText,
-                        on && addStyles.choiceTextOn,
-                      ]}
-                    >
-                      {opt.label}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHead}>
+              <AppText type="pretendard-b" style={styles.modalTitle}>
+                시니어 추가
+              </AppText>
+              <Pressable
+                onPress={onClose}
+                hitSlop={10}
+                style={styles.modalClose}
+              >
+                <Ionicons name="close" size={20} color="#666" />
+              </Pressable>
             </View>
-          </View>
 
-          <View style={addStyles.fieldGroup}>
-            <AppText type="pretendard-b" style={addStyles.label}>
-              케어 모드
+            <AppText type="pretendard-m" style={styles.modalDesc}>
+              관리할 시니어의 정보를 입력해주세요.
             </AppText>
-            <View style={addStyles.modeCol}>
-              {(
-                [
-                  {
-                    key: "AUTONOMOUS",
-                    title: "기본 관리 모드",
-                    desc: "꼭 필요한 알림만",
-                  },
-                  {
-                    key: "MANAGED",
-                    title: "집중 관리 모드",
-                    desc: "실시간 확인과 빠른 경고",
-                  },
-                ] as { key: CareMode; title: string; desc: string }[]
-              ).map((opt) => {
-                const on = careMode === opt.key;
-                return (
-                  <Pressable
-                    key={opt.key}
-                    onPress={() => setCareMode(opt.key)}
-                    style={[
-                      addStyles.modeBtn,
-                      on && addStyles.modeBtnOn,
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
+
+            <View style={addStyles.fieldGroup}>
+              <AppText type="pretendard-b" style={addStyles.label}>
+                닉네임
+              </AppText>
+              <TextInput
+                value={nickname}
+                onChangeText={setNickname}
+                placeholder="예: 김장군"
+                placeholderTextColor="#BBB"
+                maxLength={10}
+                style={addStyles.input}
+              />
+            </View>
+
+            <View style={addStyles.fieldGroup}>
+              <AppText type="pretendard-b" style={addStyles.label}>
+                성별
+              </AppText>
+              <View style={addStyles.choiceRow}>
+                {(
+                  [
+                    { key: "MALE", label: "남" },
+                    { key: "FEMALE", label: "여" },
+                  ] as { key: SeniorGender; label: string }[]
+                ).map((opt) => {
+                  const on = gender === opt.key;
+                  return (
+                    <Pressable
+                      key={opt.key}
+                      onPress={() => setGender(opt.key)}
+                      style={[addStyles.choiceBtn, on && addStyles.choiceBtnOn]}
+                    >
                       <AppText
                         type="pretendard-b"
                         style={[
-                          addStyles.modeTitle,
-                          on && addStyles.modeTitleOn,
+                          addStyles.choiceText,
+                          on && addStyles.choiceTextOn,
                         ]}
                       >
-                        {opt.title}
+                        {opt.label}
                       </AppText>
-                      <AppText
-                        type="pretendard-m"
-                        style={addStyles.modeDesc}
-                      >
-                        {opt.desc}
-                      </AppText>
-                    </View>
-                    {on && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={22}
-                        color="#F8B835"
-                      />
-                    )}
-                  </Pressable>
-                );
-              })}
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-          </View>
 
-          <View style={styles.modalActions}>
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [
-                styles.modalCopyBtn,
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <AppText type="pretendard-b" style={styles.modalCopyText}>
-                취소
+            <View style={addStyles.fieldGroup}>
+              <AppText type="pretendard-b" style={addStyles.label}>
+                케어 모드
               </AppText>
-            </Pressable>
-            <Pressable
-              onPress={handleSubmit}
-              disabled={!canSubmit}
-              style={({ pressed }) => [
-                styles.modalPrimaryBtn,
-                !canSubmit && styles.modalPrimaryBtnDisabled,
-                pressed && canSubmit && { opacity: 0.85 },
-              ]}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#222" />
-              ) : (
-                <>
-                  <Ionicons name="person-add" size={16} color="#222" />
-                  <AppText type="pretendard-b" style={styles.modalPrimaryText}>
-                    추가하기
-                  </AppText>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </Pressable>
+              <View style={addStyles.modeCol}>
+                {(
+                  [
+                    {
+                      key: "AUTONOMOUS",
+                      title: "기본 관리 모드",
+                      desc: "꼭 필요한 알림만",
+                    },
+                    {
+                      key: "MANAGED",
+                      title: "집중 관리 모드",
+                      desc: "실시간 확인과 빠른 경고",
+                    },
+                  ] as { key: CareMode; title: string; desc: string }[]
+                ).map((opt) => {
+                  const on = careMode === opt.key;
+                  return (
+                    <Pressable
+                      key={opt.key}
+                      onPress={() => setCareMode(opt.key)}
+                      style={[addStyles.modeBtn, on && addStyles.modeBtnOn]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <AppText
+                          type="pretendard-b"
+                          style={[
+                            addStyles.modeTitle,
+                            on && addStyles.modeTitleOn,
+                          ]}
+                        >
+                          {opt.title}
+                        </AppText>
+                        <AppText type="pretendard-m" style={addStyles.modeDesc}>
+                          {opt.desc}
+                        </AppText>
+                      </View>
+                      {on && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={22}
+                          color="#F8B835"
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={onClose}
+                style={({ pressed }) => [
+                  styles.modalCopyBtn,
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <AppText type="pretendard-b" style={styles.modalCopyText}>
+                  취소
+                </AppText>
+              </Pressable>
+              <Pressable
+                onPress={handleSubmit}
+                disabled={!canSubmit}
+                style={({ pressed }) => [
+                  styles.modalPrimaryBtn,
+                  !canSubmit && styles.modalPrimaryBtnDisabled,
+                  pressed && canSubmit && { opacity: 0.85 },
+                ]}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#222" />
+                ) : (
+                  <>
+                    <Ionicons name="person-add" size={16} color="#222" />
+                    <AppText
+                      type="pretendard-b"
+                      style={styles.modalPrimaryText}
+                    >
+                      추가하기
+                    </AppText>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
     </Modal>
@@ -841,10 +835,7 @@ function InviteCodeModal({
               ]}
             >
               <Ionicons name="create-outline" size={16} color="#5BC4AE" />
-              <AppText
-                type="pretendard-b"
-                style={styles.editProfileBtnText}
-              >
+              <AppText type="pretendard-b" style={styles.editProfileBtnText}>
                 {senior.nickname}님 정보 수정
               </AppText>
             </Pressable>

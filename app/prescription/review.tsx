@@ -24,6 +24,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -134,6 +135,7 @@ export default function PrescriptionReviewScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [slotMap, setSlotMap] = useState<SlotMap>({});
   const [amountMap, setAmountMap] = useState<AmountMap>({});
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
   /** candidate별 dosage 입력값 (OCR 누락분 보강용) */
   const [dosageMap, setDosageMap] = useState<Record<number, string>>({});
 
@@ -509,26 +511,40 @@ export default function PrescriptionReviewScreen() {
             <AppText type="pretendard-b" style={styles.imageCardTitle}>
               처방전 원본
             </AppText>
-            <Image
-              source={{ uri: detail.maskedImageUrl }}
-              style={styles.prescriptionImage}
-              resizeMode="contain"
-              onLoadStart={() =>
-                console.log(
-                  "[prescription] image load start:",
-                  detail.maskedImageUrl,
-                )
-              }
-              onLoad={() => console.log("[prescription] image loaded OK")}
-              onError={(e) =>
-                console.log(
-                  "[prescription] image load FAILED:",
-                  e.nativeEvent,
-                  "url:",
-                  detail.maskedImageUrl,
-                )
-              }
-            />
+            <Pressable
+              onPress={() => setImageViewerOpen(true)}
+              style={({ pressed }) => [
+                styles.prescriptionImageButton,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Image
+                source={{ uri: detail.maskedImageUrl }}
+                style={styles.prescriptionImage}
+                resizeMode="contain"
+                onLoadStart={() =>
+                  console.log(
+                    "[prescription] image load start:",
+                    detail.maskedImageUrl,
+                  )
+                }
+                onLoad={() => console.log("[prescription] image loaded OK")}
+                onError={(e) =>
+                  console.log(
+                    "[prescription] image load FAILED:",
+                    e.nativeEvent,
+                    "url:",
+                    detail.maskedImageUrl,
+                  )
+                }
+              />
+              <View style={styles.zoomBadge}>
+                <Ionicons name="search" size={14} color="#FFF" />
+                <AppText type="pretendard-b" style={styles.zoomBadgeText}>
+                  크게 보기
+                </AppText>
+              </View>
+            </Pressable>
             <AppText type="pretendard-m" style={styles.imageCardHint}>
               개인정보는 자동 마스킹되어 있어요
             </AppText>
@@ -583,6 +599,42 @@ export default function PrescriptionReviewScreen() {
           </AppText>
         </Pressable>
       </View>
+
+      <Modal
+        visible={imageViewerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImageViewerOpen(false)}
+      >
+        <View style={styles.imageViewer}>
+          <Pressable
+            onPress={() => setImageViewerOpen(false)}
+            style={({ pressed }) => [
+              styles.imageViewerClose,
+              pressed && { opacity: 0.75 },
+            ]}
+          >
+            <Ionicons name="close" size={24} color="#FFF" />
+          </Pressable>
+          {detail.maskedImageUrl && (
+            <ScrollView
+              style={styles.imageViewerScroll}
+              contentContainerStyle={styles.imageViewerContent}
+              maximumZoomScale={3}
+              minimumZoomScale={1}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              bouncesZoom
+            >
+              <Image
+                source={{ uri: detail.maskedImageUrl }}
+                style={styles.imageViewerImage}
+                resizeMode="contain"
+              />
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -948,8 +1000,62 @@ const styles = StyleSheet.create({
   },
   prescriptionImage: {
     width: "100%",
+    height: "100%",
+    borderRadius: 12,
+    backgroundColor: "#F4F2EA",
+  },
+  prescriptionImageButton: {
+    width: "100%",
     aspectRatio: 3 / 4,
     borderRadius: 12,
+    backgroundColor: "#F4F2EA",
+    overflow: "hidden",
+  },
+  zoomBadge: {
+    position: "absolute",
+    right: 10,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.58)",
+  },
+  zoomBadgeText: {
+    fontSize: 12,
+    color: "#FFF",
+  },
+  imageViewer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+  },
+  imageViewerClose: {
+    position: "absolute",
+    top: 54,
+    right: 18,
+    zIndex: 2,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageViewerScroll: {
+    flex: 1,
+  },
+  imageViewerContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 96,
+  },
+  imageViewerImage: {
+    width: "100%",
+    aspectRatio: 3 / 4,
     backgroundColor: "#F4F2EA",
   },
   imageCardHint: {

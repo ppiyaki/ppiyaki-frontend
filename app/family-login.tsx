@@ -241,7 +241,8 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     paddingHorizontal: 24,
     paddingTop: 8,
-    paddingBottom: 32,
+    paddingBottom: 140,
+    minHeight: 760,
   },
   topBar: {
     flexDirection: "row",

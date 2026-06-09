@@ -76,8 +76,8 @@ const SETTING_GROUPS: SettingGroup[] = [
       },
       {
         key: "durWarningEnabled",
-        label: "DUR 위험 알림",
-        description: "약물 상호작용·중복 위험이 발견되면 알림을 받아요",
+        label: "금기 위험 알림",
+        description: "함께 먹으면 안 되거나 중복된 약이 발견되면 알림을 받아요",
       },
     ],
   },

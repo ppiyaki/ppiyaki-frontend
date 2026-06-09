@@ -251,9 +251,11 @@ function Field({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#FFFDF6" },
   scroll: {
+    flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 24,
+    paddingBottom: 140,
+    minHeight: 720,
     gap: 18,
   },
 

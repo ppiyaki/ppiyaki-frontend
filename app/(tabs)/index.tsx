@@ -193,7 +193,11 @@ export default function HomeScreen() {
               pressed && { transform: [{ scale: 0.95 }] },
             ]}
           >
-            <Ionicons name="chatbubbles" size={22} color="#5A4500" />
+            <Image
+              source={require("../../assets/images/icon/ppiyaki.png")}
+              style={styles.bubbleIcon}
+              resizeMode="contain"
+            />
             <AppText type="pretendard-b" style={styles.bubbleText}>
               대화하기
             </AppText>
@@ -435,6 +439,10 @@ const styles = StyleSheet.create({
   bubbleText: {
     fontSize: 18,
     color: "#5A4500",
+  },
+  bubbleIcon: {
+    width: 24,
+    height: 24,
   },
 
   /* ── 오늘 복약 상태 (헤더 아래 가로 배치) ── */

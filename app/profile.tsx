@@ -4,7 +4,7 @@ import { useConfirm } from "@/contexts/confirm-context";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { ApiError } from "@/services/api";
 import { getMe, logoutKakao, MeResponse } from "@/services/auth";
-import { PetMe, getMyPet } from "@/services/pets";
+import { getMyPet, PetMe } from "@/services/pets";
 import { resolveProfileImage } from "@/utils/profile-image";
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
@@ -127,21 +127,21 @@ export default function ProfileScreen() {
       onPress: () => router.push("/settings/meal-times" as any),
     },
     {
-      label: "앱 정보",
-      icon: "information-circle-outline",
+      label: "내 보호자",
+      icon: "people-outline",
       iconColor: "#5BC4AE",
       iconBg: "#D6F1EA",
-      onPress: () => router.push("/settings/app-info" as any),
+      onPress: () => router.push("/my-caregivers" as any),
     },
   ];
 
   const subMenu: SubMenuRow[] = [
     {
-      label: "내 보호자",
-      onPress: () => router.push("/my-caregivers" as any),
+      label: "앱 정보",
+      onPress: () => router.push("/settings/app-info" as any),
     },
     {
-      label: "문의 및 신고",
+      label: "문의하기",
       onPress: () => void Linking.openURL(FEEDBACK_URL),
     },
     { label: "계정 나가기", onPress: handleLogout },

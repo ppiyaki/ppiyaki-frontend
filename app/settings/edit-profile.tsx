@@ -2,7 +2,7 @@ import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
 import { ApiError } from "@/services/api";
-import { getMe, ProfileImageIndex, SeniorGender } from "@/services/auth";
+import { getMe, ProfileImageIndex } from "@/services/auth";
 import { uploadImage } from "@/services/upload";
 import { updateMyProfile } from "@/services/users";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,8 +21,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type GenderLabel = "남" | "여" | "비공개";
-
 interface PresetImage {
   index: ProfileImageIndex;
   source: ImageSourcePropType;
@@ -37,39 +35,20 @@ const PRESETS: PresetImage[] = [
   { index: 6, source: require("../../assets/images/pf/pfimg6.png") },
 ];
 
-const GENDERS: GenderLabel[] = ["남", "여", "비공개"];
-
-// 백엔드 enum ↔ 한글 라벨 매핑
-const LABEL_TO_API: Record<GenderLabel, SeniorGender> = {
-  남: "MALE",
-  여: "FEMALE",
-  비공개: "UNKNOWN",
-};
-const API_TO_LABEL: Record<SeniorGender, GenderLabel> = {
-  MALE: "남",
-  FEMALE: "여",
-  OTHER: "비공개",
-  UNKNOWN: "비공개",
-};
-
 export default function EditProfileScreen() {
   const router = useRouter();
   const confirm = useConfirm();
 
   // 서버에서 받아온 초기값 (dirty 검사용)
   const [initialName, setInitialName] = useState("");
-  const [initialGender, setInitialGender] = useState<GenderLabel>("비공개");
   const [initialPresetIndex, setInitialPresetIndex] =
     useState<ProfileImageIndex | null>(null);
   const [initialServerImageUrl, setInitialServerImageUrl] = useState<
     string | null
   >(null);
-  // 시니어 본인만 성별 수정 가능 — 보호자 클라이언트는 gender 미전송 (백엔드 명세)
-  const [isSenior, setIsSenior] = useState(false);
 
   // 편집 중인 값
   const [name, setName] = useState("");
-  const [gender, setGender] = useState<GenderLabel>("비공개");
   const [presetIndex, setPresetIndex] = useState<ProfileImageIndex | null>(
     null,
   );
@@ -84,12 +63,8 @@ export default function EditProfileScreen() {
       try {
         const me = await getMe(true);
         if (cancelled) return;
-        setIsSenior(me.role === "SENIOR");
         setInitialName(me.nickname);
         setName(me.nickname);
-        const g: GenderLabel = me.gender ? API_TO_LABEL[me.gender] : "비공개";
-        setInitialGender(g);
-        setGender(g);
         // 프사 한 번도 설정 안 한 사용자는 미리보기/그리드가 비어보이지 않게
         // 기본값 1번 (pfimg1) 으로 preselect — 홈 카드도 동일한 fallback 사용 중
         const rawIdx = me.profileImage ?? null;
@@ -111,7 +86,6 @@ export default function EditProfileScreen() {
 
   const dirty =
     name.trim() !== initialName ||
-    (isSenior && gender !== initialGender) ||
     presetIndex !== initialPresetIndex ||
     customUri !== null;
 
@@ -206,8 +180,6 @@ export default function EditProfileScreen() {
           : presetIndex != null
             ? { profileImage: presetIndex }
             : {}),
-        // 시니어만 gender 전송. 보호자는 명세상 미전송.
-        ...(isSenior ? { gender: LABEL_TO_API[gender] } : {}),
       });
       router.back();
     } catch (e) {
@@ -322,33 +294,6 @@ export default function EditProfileScreen() {
           />
         </View>
 
-        {/* 성별 — 시니어 본인만 수정 가능. 보호자는 섹션 자체 숨김. */}
-        {isSenior && (
-          <View style={styles.section}>
-            <AppText type="pretendard-b" style={styles.sectionTitle}>
-              성별
-            </AppText>
-            <View style={styles.genderRow}>
-              {GENDERS.map((g) => {
-                const on = gender === g;
-                return (
-                  <Pressable
-                    key={g}
-                    onPress={() => setGender(g)}
-                    style={[styles.genderBtn, on && styles.genderBtnOn]}
-                  >
-                    <AppText
-                      type="pretendard-b"
-                      style={[styles.genderText, on && styles.genderTextOn]}
-                    >
-                      {g}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        )}
       </ScrollView>
 
       <View style={styles.footer}>
