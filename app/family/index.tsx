@@ -12,7 +12,11 @@ import {
   getDashboardDaily,
   getDashboardWeekly,
 } from "@/services/dashboard";
-import { isTakenStatus, paletteForStatus } from "@/services/dashboard-status";
+import {
+  effectiveSlotStatus,
+  isTakenStatus,
+  paletteForStatus,
+} from "@/services/dashboard-status";
 import { MEDICATION_UPDATED_EVENT } from "@/services/medication-events";
 import { listMedicines, Medicine } from "@/services/medicines";
 import { listPrescriptions } from "@/services/prescriptions";
@@ -38,6 +42,7 @@ interface Dose {
   label: string;
   meds: string;
   status: SlotStatus;
+  rawStatus: SlotStatus;
 }
 
 const SENIOR_IMAGES: ImageSourcePropType[] = [
@@ -80,7 +85,7 @@ function trimMealTime(hms: string | null | undefined): string {
   return hms.slice(0, 5); // "HH:mm:ss" → "HH:mm"
 }
 
-function mapDailySlotToDose(slot: DailySlot): Dose {
+function mapDailySlotToDose(slot: DailySlot, dateIso: string): Dose {
   const meds =
     slot.medicines.length === 0
       ? "복약 없음"
@@ -93,8 +98,13 @@ function mapDailySlotToDose(slot: DailySlot): Dose {
     time: trimMealTime(slot.mealTime),
     label: SLOT_LABEL[slot.slot],
     meds,
-    status: slot.status,
+    status: effectiveSlotStatus(slot.status, slot.mealTime, dateIso),
+    rawStatus: slot.status,
   };
+}
+
+function isScheduledSlot(slot: DailySlot): boolean {
+  return slot.medicines.length > 0;
 }
 
 /** 오늘이 아직 진행 중이면 건너뛰고, 가장 최근 완료일 기준 연속 복약 성공 일수 카운트 */
@@ -258,7 +268,10 @@ export default function FamilyHomeScreen() {
     };
   }, [selectedSeniorId, refreshKey]);
 
-  const doses: Dose[] = daily?.slots.map(mapDailySlotToDose) ?? [];
+  const doses: Dose[] =
+    daily?.slots
+      .filter(isScheduledSlot)
+      .map((slot) => mapDailySlotToDose(slot, daily.date)) ?? [];
   const completed = doses.filter((d) => isTakenStatus(d.status)).length;
   const streakDays = weekly ? calcStreakFromWeekly(weekly) : 0;
 
@@ -550,6 +563,10 @@ function DoseRow({ dose, isLast }: { dose: Dose; isLast: boolean }) {
   const done = isTakenStatus(dose.status);
   const pending = dose.status === "PENDING" || dose.status === "NOT_SCHEDULED";
   const icon = doseStatusIcon(dose.status);
+  const statusLabel =
+    dose.rawStatus === "PENDING" && dose.status === "DELAYED"
+      ? "복용 지연"
+      : palette.label;
   return (
     <View style={styles.doseRow}>
       <AppText type="pretendard-m" style={styles.doseTime}>
@@ -589,7 +606,7 @@ function DoseRow({ dose, isLast }: { dose: Dose; isLast: boolean }) {
             { color: pending ? "#888" : palette.color },
           ]}
         >
-          {palette.label}
+          {statusLabel}
         </AppText>
       </View>
     </View>

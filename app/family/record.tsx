@@ -14,7 +14,10 @@ import {
   WeeklyDashboard,
   WeeklyDay,
 } from "@/services/dashboard";
-import { paletteForStatus as sharedPaletteForStatus } from "@/services/dashboard-status";
+import {
+  effectiveSlotStatus,
+  paletteForStatus as sharedPaletteForStatus,
+} from "@/services/dashboard-status";
 import {
   fromServerSlot,
   getMealTimes,
@@ -74,25 +77,6 @@ function formatDateLabelKo(iso: string): string {
 }
 
 /* ────────────────────── helpers: 색상 ────────────────────── */
-
-/**
- * 백엔드가 시간 지난 PENDING 을 MISSED 로 전이 안 시키는 케이스 보정.
- * mealTime + GRACE_MIN 이 현재보다 과거면 시각적으로 MISSED 취급.
- * 백엔드가 수정되면 이 함수 제거하면 됨.
- */
-const MISSED_GRACE_MIN = 60;
-function effectiveSlotStatus(
-  status: SlotStatus,
-  mealTimeHms: string | null | undefined,
-  dateIso: string,
-): SlotStatus {
-  if (status !== "PENDING") return status;
-  if (!mealTimeHms) return status;
-  const [h, m] = mealTimeHms.split(":").map((x) => parseInt(x, 10) || 0);
-  const slotDate = new Date(dateIso);
-  slotDate.setHours(h, m + MISSED_GRACE_MIN, 0, 0);
-  return slotDate < new Date() ? "MISSED" : "PENDING";
-}
 
 function paletteForStatus(s: DayStatus | SlotStatus) {
   return sharedPaletteForStatus(s);
@@ -381,12 +365,11 @@ function DailyView({
     );
   }
 
-  const completed = data.slots.filter(
+  const scheduledSlots = data.slots.filter((slot) => slot.medicines.length > 0);
+  const completed = scheduledSlots.filter(
     (slot) => slot.status === "PERFECT" || slot.status === "DELAYED",
   ).length;
-  const totalScheduled = data.slots.filter(
-    (slot) => slot.status !== "NOT_SCHEDULED",
-  ).length;
+  const totalScheduled = scheduledSlots.length;
 
   return (
     <View style={{ gap: 14 }}>
@@ -404,7 +387,7 @@ function DailyView({
         </View>
 
         <View style={s.photoRow}>
-          {data.slots.map((slot) => (
+          {scheduledSlots.map((slot) => (
             <PhotoSlot key={slot.slot} slot={slot} dateIso={data.date} />
           ))}
         </View>

@@ -881,9 +881,6 @@ function SeniorRow({
         <AppText type="pretendard-b" style={styles.seniorName}>
           {senior.nickname}
         </AppText>
-        <Pressable hitSlop={10} style={styles.infoBtn}>
-          <Ionicons name="information-circle-outline" size={22} color="#777" />
-        </Pressable>
       </View>
       <View style={styles.seniorActions}>
         <Pressable

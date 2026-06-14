@@ -35,7 +35,7 @@ type MenuItem = {
 
 const MENU_ITEMS: MenuItem[] = [
   {
-    label: "처방전 등록",
+    label: "약 등록",
     icon: require("../../assets/images/icon/prescript.png"),
     description: " ",
     arrowBg: "#FFF1C8",
@@ -130,9 +130,7 @@ export default function HomeScreen() {
 
   const streak = pet?.streak ?? 0;
   const point = pet?.point ?? 0;
-  const currentStage = pet
-    ? PET_STAGES[stageIndex(pet.stage)]
-    : PET_STAGES[0];
+  const currentStage = pet ? PET_STAGES[stageIndex(pet.stage)] : PET_STAGES[0];
 
   return (
     <SafeAreaView
@@ -168,10 +166,7 @@ export default function HomeScreen() {
       {/* 오늘 복약 현황 — 헤더 아래 가로 배치. 탭하면 알림함으로 */}
       <Pressable
         onPress={() => router.push("/notifications" as any)}
-        style={({ pressed }) => [
-          styles.todayRow,
-          pressed && { opacity: 0.8 },
-        ]}
+        style={({ pressed }) => [styles.todayRow, pressed && { opacity: 0.8 }]}
       >
         <TodayChip slot="BREAKFAST" daily={daily} />
         <TodayChip slot="LUNCH" daily={daily} />
