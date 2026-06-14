@@ -71,24 +71,6 @@ const CATEGORY_META: Record<
   },
 };
 
-/** 필터 탭 정의. 'all' 은 클라이언트 사이드에서 전체 표시, 나머지는 카테고리 매칭. */
-type FilterTab = "all" | "prescription" | "medication" | "urgent";
-
-const FILTER_TABS: { key: FilterTab; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "prescription", label: "처방전 검토" },
-  { key: "medication", label: "복약 완료" },
-  { key: "urgent", label: "긴급 경고" },
-];
-
-const FILTER_CATEGORIES: Record<FilterTab, NotificationCategory[] | null> = {
-  all: null,
-  prescription: ["PRESCRIPTION_REVIEW_REQUEST"],
-  // 시니어 본인의 복약 리마인더 + 보호자가 받는 복약 완료 알림 모두 묶어서 표시
-  medication: ["MEDICATION_REMINDER", "MEDICATION_COMPLETE"],
-  urgent: ["MEDICATION_DELAY", "DUR_WARNING", "FAMILY_SAFETY"],
-};
-
 export default function NotificationsScreen() {
   useRequireAuth();
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -97,13 +79,6 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FilterTab>("all");
-
-  const filteredItems = (() => {
-    const cats = FILTER_CATEGORIES[filter];
-    if (cats == null) return items;
-    return items.filter((it) => cats.includes(it.category));
-  })();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -170,7 +145,7 @@ export default function NotificationsScreen() {
     }
   };
 
-  const groups = groupByDate(filteredItems);
+  const groups = groupByDate(items);
 
   return (
     <SafeAreaView
@@ -195,37 +170,6 @@ export default function NotificationsScreen() {
           ) : undefined
         }
       />
-
-      <View style={styles.tabWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabRow}
-        >
-          {FILTER_TABS.map((tab) => {
-            const on = filter === tab.key;
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => setFilter(tab.key)}
-                style={({ pressed }) => [
-                  styles.tab,
-                  on && styles.tabOn,
-                  pressed && { opacity: 0.85 },
-                ]}
-              >
-                <AppText
-                  // `type` 은 단일 string — 배열 대신 삼항으로 분기
-                  type={on ? "pretendard-b" : "pretendard-m"}
-                  style={[styles.tabText, on && styles.tabTextOn]}
-                >
-                  {tab.label}
-                </AppText>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {loading && (
@@ -535,42 +479,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#E8F7F2",
   },
   markText: { fontSize: 13, color: "#5BC4AE" },
-
-  // wrapper에 명시적 height — horizontal ScrollView 가 부모 flex column 안에서
-  // 세로로 늘어나는 RN 동작 회피. 빈 상태에서도 필터가 헤더 바로 아래에 고정됨.
-  tabWrap: {
-    height: 60,
-  },
-  tabRow: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 8,
-    gap: 8,
-    alignItems: "center",
-  },
-  tab: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    borderColor: "#EDE8D6",
-    backgroundColor: "#FFF",
-  },
-  tabOn: {
-    borderColor: "#FFD24D",
-    backgroundColor: "#FFF8E0",
-  },
-  tabText: {
-    fontSize: 13,
-    color: "#888",
-    // AppText base에 includeFontPadding:false 가 깔려있어 한글 받침이 잘림 →
-    // 명시적 lineHeight + includeFontPadding 복원으로 보정.
-    lineHeight: 18,
-    includeFontPadding: true,
-  },
-  tabTextOn: {
-    color: "#5A4500",
-  },
 
   stateBox: { paddingVertical: 60, alignItems: "center", gap: 8 },
   stateText: { fontSize: 14, color: "#888" },

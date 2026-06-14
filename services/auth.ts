@@ -263,3 +263,16 @@ export async function logoutKakao() {
   await clearTokens();
   clearMeCache();
 }
+
+/**
+ * 현재 로그인한 계정 회원탈퇴.
+ * 성공한 경우에만 로컬 토큰/캐시를 정리한다.
+ */
+export async function withdrawMe(): Promise<void> {
+  await tearDownPush();
+  await apiFetch<void>("/api/v1/users/me", {
+    method: "DELETE",
+  });
+  await clearTokens();
+  clearMeCache();
+}

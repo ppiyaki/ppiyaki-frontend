@@ -1,6 +1,8 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
 import { useConfirm } from "@/contexts/confirm-context";
+import { ApiError } from "@/services/api";
+import { withdrawMe } from "@/services/auth";
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import { useState } from "react";
@@ -18,8 +20,10 @@ export default function WithdrawScreen() {
   const navigation = useNavigation();
   const confirm = useConfirm();
   const [agreed, setAgreed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleWithdraw = async () => {
+    if (submitting) return;
     const ok = await confirm({
       title: "정말 탈퇴할까요?",
       message:
@@ -28,14 +32,26 @@ export default function WithdrawScreen() {
       danger: true,
     });
     if (!ok) return;
-    // TODO: 탈퇴 API 연결
-    // 네비게이션 스택 완전 초기화 — 뒤로가기로 탈퇴된 계정 화면에 못 돌아오게.
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [{ name: "select-role" }],
-      }),
-    );
+    setSubmitting(true);
+    try {
+      await withdrawMe();
+      // 네비게이션 스택 완전 초기화 — 뒤로가기로 탈퇴된 계정 화면에 못 돌아오게.
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: "select-role" }],
+        }),
+      );
+    } catch (e) {
+      const msg =
+        e instanceof ApiError ? e.toUserMessage() : "회원탈퇴에 실패했어요.";
+      await confirm({
+        title: "회원탈퇴 실패",
+        message: msg,
+        confirmText: "확인",
+      });
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -92,11 +108,11 @@ export default function WithdrawScreen() {
 
         <Pressable
           onPress={handleWithdraw}
-          disabled={!agreed}
+          disabled={!agreed || submitting}
           style={({ pressed }) => [
             styles.btn,
-            !agreed && styles.btnDisabled,
-            pressed && agreed && { opacity: 0.85 },
+            (!agreed || submitting) && styles.btnDisabled,
+            pressed && agreed && !submitting && { opacity: 0.85 },
           ]}
         >
           <AppText type="pretendard-b" style={styles.btnText}>
