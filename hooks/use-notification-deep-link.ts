@@ -1,5 +1,5 @@
 import * as Notifications from "expo-notifications";
-import { useRouter } from "expo-router";
+import { useRootNavigationState, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 
 /**
@@ -9,21 +9,24 @@ import { useEffect, useRef } from "react";
  * - 포그라운드/백그라운드 탭: addNotificationResponseReceivedListener 로 실시간 처리
  *
  * 같은 알림 응답이 두 경로 모두에서 잡힐 수 있으므로 actionIdentifier+date 로 중복 처리 방지.
+ *
+ * 안드로이드 cold start 멈춤 대응:
+ * 루트 레이아웃은 스플래시/폰트 로딩 동안 <Stack> 을 렌더하지 않으므로, 그 전에 알림 응답이
+ * 도착하면 내비게이터가 마운트되기 전에 router.push 가 호출돼 내비게이션이 꼬여 앱이 멈춘다.
+ * useRootNavigationState().key 로 내비게이터 마운트 완료를 감지하고, 준비 전에 도착한 응답은
+ * pendingRef 에 보류했다가 준비되는 순간 처리한다.
  */
 export function useNotificationDeepLink() {
   const router = useRouter();
+  const navState = useRootNavigationState();
+  const navReady = !!navState?.key;
   const handledRef = useRef<Set<string>>(new Set());
+  const pendingRef = useRef<Notifications.NotificationResponse | null>(null);
 
   useEffect(() => {
-    const handleResponse = (response: Notifications.NotificationResponse) => {
-      // 중복 처리 방지 — identifier + 발급 시각으로 키 구성
-      const id =
-        response.notification.request.identifier +
-        ":" +
-        String(response.notification.date);
-      if (handledRef.current.has(id)) return;
-      handledRef.current.add(id);
-
+    const navigateForResponse = (
+      response: Notifications.NotificationResponse,
+    ) => {
       const data = (response.notification.request.content.data ?? {}) as Record<
         string,
         unknown
@@ -75,6 +78,31 @@ export function useNotificationDeepLink() {
       }
     };
 
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      // 중복 처리 방지 — identifier + 발급 시각으로 키 구성
+      const id =
+        response.notification.request.identifier +
+        ":" +
+        String(response.notification.date);
+      if (handledRef.current.has(id)) return;
+
+      // 내비게이터가 아직 마운트되지 않았으면 보류 — 준비되면 effect 재실행 시 flush
+      if (!navReady) {
+        pendingRef.current = response;
+        return;
+      }
+
+      handledRef.current.add(id);
+      navigateForResponse(response);
+    };
+
+    // 내비게이터가 준비되는 순간, 보류해둔 응답 처리
+    if (navReady && pendingRef.current) {
+      const pending = pendingRef.current;
+      pendingRef.current = null;
+      handleResponse(pending);
+    }
+
     // cold start — 앱이 종료된 상태에서 알림으로 실행됐을 때
     void (async () => {
       try {
@@ -90,7 +118,7 @@ export function useNotificationDeepLink() {
       handleResponse,
     );
     return () => sub.remove();
-  }, [router]);
+  }, [router, navReady]);
 }
 
 function parsePositiveNumber(v: unknown): number | null {

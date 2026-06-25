@@ -1,5 +1,6 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import TermsFooter from "@/components/terms-footer";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -84,6 +85,8 @@ export default function TermsScreen() {
             본 약관은 서비스 운영 정책에 따라 사전 고지 후 변경될 수 있습니다.
           </AppText>
         </View>
+
+        <TermsFooter />
       </ScrollView>
     </SafeAreaView>
   );

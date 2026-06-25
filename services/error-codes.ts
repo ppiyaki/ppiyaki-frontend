@@ -15,6 +15,7 @@ export const ERROR_CODES = {
 
   // User
   USER_001: "USER_001", // User not found
+  USER_003: "USER_003", // User already deleted
 
   // Medicine
   MEDICINE_001: "MEDICINE_001", // Medicine not found

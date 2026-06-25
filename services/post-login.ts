@@ -10,7 +10,7 @@ export type AuthRoute = "onboarding" | "senior" | "family";
 /**
  * /me 결과에 따라 다음에 갈 라우트 결정.
  * - role=SENIOR → 시니어 메인
- * - 기존 닉네임이 있거나 isOnboarded=true인 CAREGIVER/FAMILY → 보호자 메인
+ * - 기존 닉네임이 있는 CAREGIVER/FAMILY → 보호자 메인
  * - 그 외 isOnboarded=false → 온보딩
  *
  * 부수 효과:
@@ -29,13 +29,8 @@ export async function resolveAuthRoute(): Promise<AuthRoute> {
     }
   }
   if (me.role === "SENIOR") return "senior";
+  if (me.role === "CAREGIVER" || me.role === "FAMILY") return "family";
   if (me.nickname?.trim()) return "family";
-  if (
-    me.isOnboarded === true &&
-    (me.role === "CAREGIVER" || me.role === "FAMILY")
-  ) {
-    return "family";
-  }
   if (me.isOnboarded === false) return "onboarding";
   return "family";
 }

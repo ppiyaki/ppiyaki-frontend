@@ -21,7 +21,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import {
   ActivityIndicator,
   Image,
@@ -649,7 +653,10 @@ export default function PrescriptionReviewScreen() {
         animationType="fade"
         onRequestClose={() => setImageViewerOpen(false)}
       >
-        <View style={styles.imageViewer}>
+        {/* RN Modal 은 앱 루트 GestureHandlerRootView 바깥의 별도 네이티브 윈도우에
+            렌더되므로, 모달 안에서 gesture-handler 제스처가 동작하려면 자체
+            GestureHandlerRootView 로 감싸야 한다 (안드로이드에서 핀치/팬 먹통 방지). */}
+        <GestureHandlerRootView style={styles.imageViewer}>
           <Pressable
             onPress={() => setImageViewerOpen(false)}
             style={({ pressed }) => [
@@ -664,7 +671,7 @@ export default function PrescriptionReviewScreen() {
               <ZoomablePrescriptionImage uri={detail.maskedImageUrl} />
             </View>
           )}
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </SafeAreaView>
   );

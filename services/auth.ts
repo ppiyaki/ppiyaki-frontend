@@ -1,5 +1,5 @@
 import * as KakaoLogin from "@react-native-seoul/kakao-login";
-import { apiFetch } from "./api";
+import { ApiError, apiFetch } from "./api";
 import { clearChatCache } from "./chat";
 import { setupPushAndRegister, tearDownPush } from "./push-notifications";
 import {
@@ -270,9 +270,21 @@ export async function logoutKakao() {
  */
 export async function withdrawMe(): Promise<void> {
   await tearDownPush();
-  await apiFetch<void>("/api/v1/users/me", {
-    method: "DELETE",
-  });
+  try {
+    await apiFetch<void>("/api/v1/users/me", {
+      method: "DELETE",
+    });
+  } catch (e) {
+    if (
+      e instanceof ApiError &&
+      (e.code === "USER_003" || e.code === "USER_001")
+    ) {
+      await clearTokens();
+      clearMeCache();
+      return;
+    }
+    throw e;
+  }
   await clearTokens();
   clearMeCache();
 }

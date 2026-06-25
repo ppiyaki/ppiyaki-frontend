@@ -1,5 +1,6 @@
 import AppText from "@/components/app-text";
 import PageHeader from "@/components/page-header";
+import TermsFooter from "@/components/terms-footer";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -77,6 +78,8 @@ export default function TermsPrivacyScreen() {
             ))}
           </View>
         ))}
+
+        <TermsFooter />
       </ScrollView>
     </SafeAreaView>
   );
