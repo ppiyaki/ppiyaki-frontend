@@ -10,16 +10,26 @@ import { useEffect, useRef } from "react";
  *
  * 같은 알림 응답이 두 경로 모두에서 잡힐 수 있으므로 actionIdentifier+date 로 중복 처리 방지.
  *
- * 안드로이드 cold start 멈춤 대응:
- * 루트 레이아웃은 스플래시/폰트 로딩 동안 <Stack> 을 렌더하지 않으므로, 그 전에 알림 응답이
- * 도착하면 내비게이터가 마운트되기 전에 router.push 가 호출돼 내비게이션이 꼬여 앱이 멈춘다.
- * useRootNavigationState().key 로 내비게이터 마운트 완료를 감지하고, 준비 전에 도착한 응답은
- * pendingRef 에 보류했다가 준비되는 순간 처리한다.
+ * 안드로이드 cold start 멈춤(빈 노란 화면) 대응:
+ * cold start 시 진입점인 app/index.tsx 는 인증 상태를 확인한 뒤 <Redirect> 로 실제 화면
+ * ((tabs)/family/onboarding 등)으로 보낸다. 이 redirect 가 끝나기 전에 딥링크가
+ * router.push 를 호출하면 redirect 와 push 가 충돌해 index 의 로딩 화면(노란 배경)에서
+ * 멈춘다.
+ * → 루트 내비게이터가 마운트되고(navState.key) "index 에서 실제 화면으로 넘어간"
+ *   상태(settled)가 될 때까지 딥링크 push 를 보류했다가, 정착되는 순간 처리한다.
  */
 export function useNotificationDeepLink() {
   const router = useRouter();
   const navState = useRootNavigationState();
-  const navReady = !!navState?.key;
+
+  // 루트 스택이 마운트됐고, 현재 최상위 라우트가 더 이상 "index"(스플래시/라우팅 게이트)가
+  // 아니면 = 인증 라우팅이 끝나 실제 화면에 정착된 것으로 본다.
+  const currentRootRoute =
+    navState && typeof navState.index === "number"
+      ? navState.routes?.[navState.index]?.name
+      : undefined;
+  const settled = !!navState?.key && !!currentRootRoute && currentRootRoute !== "index";
+
   const handledRef = useRef<Set<string>>(new Set());
   const pendingRef = useRef<Notifications.NotificationResponse | null>(null);
 
@@ -86,8 +96,8 @@ export function useNotificationDeepLink() {
         String(response.notification.date);
       if (handledRef.current.has(id)) return;
 
-      // 내비게이터가 아직 마운트되지 않았으면 보류 — 준비되면 effect 재실행 시 flush
-      if (!navReady) {
+      // 인증 라우팅이 끝나기 전(index 단계)이면 보류 — settled 되면 effect 재실행 시 flush
+      if (!settled) {
         pendingRef.current = response;
         return;
       }
@@ -96,8 +106,8 @@ export function useNotificationDeepLink() {
       navigateForResponse(response);
     };
 
-    // 내비게이터가 준비되는 순간, 보류해둔 응답 처리
-    if (navReady && pendingRef.current) {
+    // 라우팅이 정착되는 순간, 보류해둔 응답 처리
+    if (settled && pendingRef.current) {
       const pending = pendingRef.current;
       pendingRef.current = null;
       handleResponse(pending);
@@ -118,7 +128,7 @@ export function useNotificationDeepLink() {
       handleResponse,
     );
     return () => sub.remove();
-  }, [router, navReady]);
+  }, [router, settled]);
 }
 
 function parsePositiveNumber(v: unknown): number | null {
