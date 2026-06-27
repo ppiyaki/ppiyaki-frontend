@@ -1,3 +1,4 @@
+import { useConsumeDeepLink } from "@/hooks/use-consume-deep-link";
 import {
   NOTIFICATION_UPDATED_EVENT,
   listNotifications,
@@ -13,6 +14,8 @@ const POLL_INTERVAL_MS = 30_000;
 export default function FamilyTabLayout() {
   const insets = useSafeAreaInsets();
   const [hasUnread, setHasUnread] = useState(false);
+  // cold start 알림 딥링크(처방전 검토 요청 등)를 인증 후 이 시점에 소비
+  useConsumeDeepLink();
 
   useEffect(() => {
     let cancelled = false;

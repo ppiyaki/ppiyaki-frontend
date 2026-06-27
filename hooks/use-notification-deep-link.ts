@@ -1,42 +1,34 @@
+import {
+  PendingDeepLink,
+  setPendingDeepLink,
+} from "@/services/pending-deep-link";
 import * as Notifications from "expo-notifications";
-import { useRootNavigationState, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 
 /**
  * FCM/시스템 알림을 탭했을 때 카테고리별로 적절한 화면으로 이동.
  *
- * - cold start (앱 종료 상태에서 알림 탭으로 실행): getLastNotificationResponseAsync 로 1회 처리
- * - 포그라운드/백그라운드 탭: addNotificationResponseReceivedListener 로 실시간 처리
+ * 두 경로를 분리해서 처리한다 (안드로이드 cold start 멈춤 대응):
+ *  - cold start (앱 종료 상태에서 알림 탭 → 앱 실행): getLastNotificationResponseAsync.
+ *    이때는 진입점 index.tsx 의 인증 라우팅이 끝나기 전이라 내비게이터가 준비되지 않았다.
+ *    바로 push 하면 index 의 <Redirect> 와 충돌해 노란 로딩 화면에서 멈춘다.
+ *    → 곧바로 이동하지 말고 보류 저장(setPendingDeepLink). 인증 후 메인 레이아웃에서
+ *      useConsumeDeepLink() 가 꺼내 이동한다.
+ *  - 앱 실행 중 탭 (포그라운드/백그라운드): addNotificationResponseReceivedListener.
+ *    이미 내비게이터가 정착된 상태이므로 즉시 push 해도 안전.
  *
- * 같은 알림 응답이 두 경로 모두에서 잡힐 수 있으므로 actionIdentifier+date 로 중복 처리 방지.
- *
- * 안드로이드 cold start 멈춤(빈 노란 화면) 대응:
- * cold start 시 진입점인 app/index.tsx 는 인증 상태를 확인한 뒤 <Redirect> 로 실제 화면
- * ((tabs)/family/onboarding 등)으로 보낸다. 이 redirect 가 끝나기 전에 딥링크가
- * router.push 를 호출하면 redirect 와 push 가 충돌해 index 의 로딩 화면(노란 배경)에서
- * 멈춘다.
- * → 루트 내비게이터가 마운트되고(navState.key) "index 에서 실제 화면으로 넘어간"
- *   상태(settled)가 될 때까지 딥링크 push 를 보류했다가, 정착되는 순간 처리한다.
+ * 같은 알림이 두 경로 모두에서 잡히는 경우를 대비해 identifier+date 로 중복 처리 방지.
  */
 export function useNotificationDeepLink() {
   const router = useRouter();
-  const navState = useRootNavigationState();
-
-  // 루트 스택이 마운트됐고, 현재 최상위 라우트가 더 이상 "index"(스플래시/라우팅 게이트)가
-  // 아니면 = 인증 라우팅이 끝나 실제 화면에 정착된 것으로 본다.
-  const currentRootRoute =
-    navState && typeof navState.index === "number"
-      ? navState.routes?.[navState.index]?.name
-      : undefined;
-  const settled = !!navState?.key && !!currentRootRoute && currentRootRoute !== "index";
-
   const handledRef = useRef<Set<string>>(new Set());
-  const pendingRef = useRef<Notifications.NotificationResponse | null>(null);
 
   useEffect(() => {
-    const navigateForResponse = (
+    // 응답 → 이동할 딥링크. 해당 없으면 null (앱만 열림).
+    const linkForResponse = (
       response: Notifications.NotificationResponse,
-    ) => {
+    ): PendingDeepLink | null => {
       const data = (response.notification.request.content.data ?? {}) as Record<
         string,
         unknown
@@ -52,13 +44,9 @@ export function useNotificationDeepLink() {
           const pId = parsePositiveNumber(
             data.prescriptionId ?? data.id ?? data.prescription_id,
           );
-          if (pId != null) {
-            router.push({
-              pathname: "/prescription/review" as any,
-              params: { id: String(pId) },
-            });
-          }
-          break;
+          return pId != null
+            ? { pathname: "/prescription/review", params: { id: String(pId) } }
+            : null;
         }
         case "MEDICATION_REMINDER": {
           const scheduleId = parseScheduleIdFromFcm(data);
@@ -72,63 +60,65 @@ export function useNotificationDeepLink() {
             rawMealSlot === "DINNER"
               ? rawMealSlot
               : undefined;
-          router.push({
-            pathname: "/dose-confirm/intro" as any,
+          return {
+            pathname: "/dose-confirm/intro",
             params: {
               ...(scheduleId != null ? { scheduleId: String(scheduleId) } : {}),
               ...(targetDate ? { targetDate } : {}),
               ...(mealSlot ? { mealSlot } : {}),
             },
-          });
-          break;
+          };
         }
-        // 나머지 카테고리는 기본 동작 (앱만 열림)
         default:
-          break;
+          return null;
       }
     };
 
-    const handleResponse = (response: Notifications.NotificationResponse) => {
-      // 중복 처리 방지 — identifier + 발급 시각으로 키 구성
+    // 중복 처리 방지 — identifier + 발급 시각으로 키 구성. 처음 보는 응답이면 true.
+    const isFirstTime = (
+      response: Notifications.NotificationResponse,
+    ): boolean => {
       const id =
         response.notification.request.identifier +
         ":" +
         String(response.notification.date);
-      if (handledRef.current.has(id)) return;
-
-      // 인증 라우팅이 끝나기 전(index 단계)이면 보류 — settled 되면 effect 재실행 시 flush
-      if (!settled) {
-        pendingRef.current = response;
-        return;
-      }
-
+      if (handledRef.current.has(id)) return false;
       handledRef.current.add(id);
-      navigateForResponse(response);
+      return true;
     };
 
-    // 라우팅이 정착되는 순간, 보류해둔 응답 처리
-    if (settled && pendingRef.current) {
-      const pending = pendingRef.current;
-      pendingRef.current = null;
-      handleResponse(pending);
-    }
+    // 앱 실행 중 탭 → 내비게이터 준비됨 → 즉시 이동
+    const sub = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        if (!isFirstTime(response)) return;
+        const link = linkForResponse(response);
+        if (link) {
+          router.push({
+            pathname: link.pathname as any,
+            params: link.params,
+          });
+        }
+      },
+    );
 
-    // cold start — 앱이 종료된 상태에서 알림으로 실행됐을 때
+    // cold start → 보류 저장 (메인 레이아웃 마운트 시 useConsumeDeepLink 가 이동)
     void (async () => {
       try {
         const last = await Notifications.getLastNotificationResponseAsync();
-        if (last) handleResponse(last);
+        if (!last || !isFirstTime(last)) return;
+        const link = linkForResponse(last);
+        if (link) setPendingDeepLink(link);
+        // 다음 실행 때 같은 알림이 또 launch 응답으로 잡혀 매번 이동하는 것 방지
+        await Notifications.clearLastNotificationResponseAsync().catch(() => {
+          // 일부 버전/플랫폼 미지원 — 무시
+        });
       } catch (e) {
         console.log("[push-deep-link] cold-start read failed:", e);
       }
     })();
 
-    // 포그라운드/백그라운드에서 알림 탭
-    const sub = Notifications.addNotificationResponseReceivedListener(
-      handleResponse,
-    );
     return () => sub.remove();
-  }, [router, settled]);
+  }, [router]);
 }
 
 function parsePositiveNumber(v: unknown): number | null {
