@@ -1,0 +1,169 @@
+name: Discord 백로그 동기화
+
+# 이슈가 열리면 "전체-백로그" 포럼에 스레드를 만들고,
+# 이후 상태 변화에 맞춰 그 스레드의 태그를 바꾼다.
+#
+# 주의: 포럼의 available_tags 는 절대 건드리지 않는다.
+#       PATCH 시 배열 전체가 교체되어 기존 스레드 태그가 끊긴다.
+#       여기서는 스레드의 applied_tags 만 조작한다.
+
+on:
+  issues:
+    types: [opened, closed, reopened, labeled, unlabeled]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: discord-sync-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+env:
+  FORUM_ID: "1483364125584130048"      # 전체-백로그
+  TAG_PENDING: "1483364420011950110"   # 미반영
+  TAG_DONE: "1483364439058157620"      # 완료
+  TAG_BUG: "1483364468686716999"       # fix
+  TAG_FEAT: "1483364506594709526"      # feat
+  TAG_ENHANCE: "1483364536684777622"   # refactor
+  TAG_BE: "1545297365148373024"        # BE
+  TAG_FE: "1545297365148373025"        # FE
+  TAG_AI: "1545302239147597956"        # AI
+  TAG_CHORE: "1545307372497543169"     # chore
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.issue.pull_request }}
+    steps:
+      - name: 매핑 파일만 체크아웃
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/discord-users.json
+          sparse-checkout-cone-mode: false
+
+      - name: 디스코드 동기화
+        env:
+          BOT: ${{ secrets.DISCORD_BOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION: ${{ github.event.action }}
+          NUM: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          URL: ${{ github.event.issue.html_url }}
+          BODY: ${{ github.event.issue.body }}
+          USER: ${{ github.event.issue.user.login }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+          REPO: ${{ github.repository }}
+          STATE: ${{ github.event.issue.state }}
+        run: |
+          set -uo pipefail
+          if [ -z "${BOT:-}" ]; then echo "DISCORD_BOT_TOKEN 없음. 건너뜁니다."; exit 0; fi
+          API=https://discord.com/api/v10
+          AUTH=(-H "Authorization: Bot $BOT" -H "Content-Type: application/json" -A curl)
+
+          # 레포 이름에서 BE/FE 접두어
+          case "$REPO" in
+            *frontend*) PREFIX="[FE]"; TAG_SIDE="$TAG_FE" ;;
+            *backend*)  PREFIX="[BE]"; TAG_SIDE="$TAG_BE" ;;
+            *)          PREFIX="[--]"; TAG_SIDE="" ;;
+          esac
+
+          # GitHub 라벨 → 포럼 태그 (셸만 사용, 중첩 heredoc 회피)
+          build_tags () {
+            local out=""
+            [ -n "$TAG_SIDE" ] && out="\"$TAG_SIDE\","
+            if [ "$STATE" = "closed" ]; then out="$out\"$TAG_DONE\""; else out="$out\"$TAG_PENDING\""; fi
+            case ",$LABELS," in
+              *,type:fix,*|*,bug,*)                out="$out,\"$TAG_BUG\"" ;;
+            esac
+            case ",$LABELS," in
+              *,type:feat,*|*,enhancement,*)       out="$out,\"$TAG_FEAT\"" ;;
+            esac
+            case ",$LABELS," in
+              *,type:refactor,*)                   out="$out,\"$TAG_ENHANCE\"" ;;
+            esac
+            case ",$LABELS," in
+              *,type:chore,*)                      out="$out,\"$TAG_CHORE\"" ;;
+            esac
+            case ",$LABELS," in
+              *,scope:ai,*)                        out="$out,\"$TAG_AI\"" ;;
+            esac
+            # 디스코드는 스레드당 태그 5개가 상한. 넘치면 뒤에서 자른다.
+            printf '[%s]' "$out" | jq -c '.[0:5]'
+          }
+
+          # 이벤트 페이로드의 본문은 낡을 수 있다. opened 와 labeled 가 거의 동시에
+          # 오면 두 실행이 모두 "마커 없음"으로 보고 스레드를 중복 생성한다.
+          # 그래서 마커는 항상 API 로 현재 본문을 다시 읽어 판단한다.
+          BODY="$(gh issue view "$NUM" --repo "$REPO" --json body --jq '.body')"
+          MARKER_RE='<!-- discord-thread: ([0-9]+) -->'
+          THREAD_ID="$(printf '%s' "$BODY" | sed -nE "s/.*${MARKER_RE}.*/\1/p" | head -1)"
+
+          if [ -z "$THREAD_ID" ]; then
+            # 제목이 길면 제목만 자르고 번호는 항상 끝에 남긴다 (포럼 제목 100자 상한)
+            SUFFIX=" #$NUM"
+            HEAD="$PREFIX "
+            AVAIL=$(( 100 - ${#HEAD} - ${#SUFFIX} ))
+            # cut -c 는 구현에 따라 바이트 단위라 한글이 깨진다. 파이썬으로 문자 단위 절단.
+            SHORT="$(TITLE="$TITLE" AVAIL="$AVAIL" python3 -c 'import os; t=os.environ["TITLE"]; n=int(os.environ["AVAIL"]); print(t if len(t)<=n else t[:n-1]+"\u2026")')"
+            NAME="${HEAD}${SHORT}${SUFFIX}"
+            SNIP="$(printf '%s' "$BODY" | sed -E 's/<!--.*-->//g' | head -c 1500)"
+            [ -z "$SNIP" ] && SNIP="_본문 없음_"
+            TAGS="$(build_tags)"
+            # GitHub 로그인 → Discord 사용자 id. 없으면 멘션 없이 진행한다.
+            DUSER=""
+            if [ -f .github/discord-users.json ]; then
+              DUSER="$(jq -r --arg u "$USER" '.[$u] // ""' .github/discord-users.json 2>/dev/null || true)"
+            fi
+            [ "$DUSER" = "null" ] && DUSER=""
+            echo "작성자 $USER → discord ${DUSER:-(미등록)}"
+            if [ -n "$DUSER" ]; then AUTHOR="<@${DUSER}>"; else AUTHOR="$USER"; fi
+            MSG="$(printf '%s\n\n%s\n\n작성 %s' "$URL" "$SNIP" "$AUTHOR")"
+            if [ -n "$DUSER" ]; then
+              jq -n --arg name "$NAME" --arg msg "$MSG" --argjson tags "$TAGS" --arg u "$DUSER" \
+                '{name:$name, applied_tags:$tags, message:{content:$msg, allowed_mentions:{users:[$u]}}}' > /tmp/p.json
+            else
+              jq -n --arg name "$NAME" --arg msg "$MSG" --argjson tags "$TAGS" \
+                '{name:$name, applied_tags:$tags, message:{content:$msg, allowed_mentions:{parse:[]}}}' > /tmp/p.json
+            fi
+            RESP="$(curl -sS -X POST "${AUTH[@]}" "$API/channels/$FORUM_ID/threads" --data @/tmp/p.json)"
+            NEW_ID="$(printf '%s' "$RESP" | jq -r '.id // empty')"
+            if [ -n "$NEW_ID" ]; then
+              echo "스레드 생성: $NEW_ID"
+              printf '%s\n\n<!-- discord-thread: %s -->' "$BODY" "$NEW_ID" > /tmp/body.md
+              gh issue edit "$NUM" --repo "$REPO" --body-file /tmp/body.md
+              # 스레드 멤버로 넣어야 이후 댓글 알림을 받는다. 멘션은 첫 글에만 유효.
+              if [ -n "$DUSER" ]; then
+                CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT "${AUTH[@]}" \
+                  "$API/channels/$NEW_ID/thread-members/$DUSER")
+                echo "작성자 스레드 구독 → HTTP $CODE"
+              fi
+            else
+              echo "생성 실패:"; printf '%s\n' "$RESP" | head -c 500; exit 1
+            fi
+          else
+            TAGS="$(build_tags)"
+            echo "태그 갱신 → $TAGS"
+            jq -n --argjson tags "$TAGS" '{applied_tags:$tags}' > /tmp/p.json
+            curl -sS -X PATCH "${AUTH[@]}" "$API/channels/$THREAD_ID" --data @/tmp/p.json | jq -r '.id // .message'
+            if [ "$ACTION" = "closed" ]; then
+              jq -n '{content:"이슈가 닫혔습니다."}' > /tmp/m.json
+              curl -sS -X POST "${AUTH[@]}" "$API/channels/$THREAD_ID/messages" --data @/tmp/m.json > /dev/null
+              curl -sS -X PATCH "${AUTH[@]}" "$API/channels/$THREAD_ID" -d '{"archived":true}' > /dev/null
+              echo "스레드 보관 처리"
+            fi
+          fi
+
+      - name: 실패 알림
+        if: ${{ failure() }}
+        env:
+          BOT: ${{ secrets.DISCORD_BOT_TOKEN }}
+          CH: "1545362536105254954"
+          REPO: ${{ github.repository }}
+          WF: ${{ github.workflow }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -z "${BOT:-}" ] && exit 0
+          MSG="⚠️ **$WF** 실패"$'\n'"레포 $REPO"$'\n'"$RUN"
+          jq -n --arg m "$MSG" '{content:$m, allowed_mentions:{parse:[]}}' > /tmp/a.json
+          curl -sS -X POST -H "Authorization: Bot $BOT" -H "Content-Type: application/json" -A curl \
+            "https://discord.com/api/v10/channels/$CH/messages" --data @/tmp/a.json > /dev/null
